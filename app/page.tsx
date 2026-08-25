@@ -1,5 +1,8 @@
+import { profile } from "./profile";
+
 export default function Home() {
   const prompts = ["Experience", "Projects", "Systems"];
+  const headline = profile.headline.join(" · ");
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#05070b] text-zinc-100 antialiased selection:bg-emerald-500/30 selection:text-white">
@@ -11,7 +14,7 @@ export default function Home() {
             T
           </div>
           <div className="text-sm font-medium tracking-[0.24em] text-zinc-300 uppercase">
-            Tom Travis
+            {profile.name}
           </div>
         </div>
 
@@ -30,16 +33,12 @@ export default function Home() {
       <main className="relative z-10 mx-auto grid min-h-[calc(100vh-100px)] max-w-6xl items-center gap-10 px-5 pb-12 pt-4 md:grid-cols-[1.1fr_0.9fr] md:px-8 lg:gap-16">
         <section className="max-w-2xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.22em] text-emerald-300">
-            Data Engineering · AI · Software
+            {headline}
           </div>
 
           <h1 className="mt-6 text-5xl font-medium tracking-[-0.08em] text-white sm:text-6xl md:text-7xl xl:text-[7rem]">
-            Tom Travis
+            {profile.name}
           </h1>
-
-          <p className="mt-6 max-w-xl text-base leading-7 text-zinc-300 sm:text-lg">
-            I build data systems and intelligent software that turn complexity into reliable operational leverage.
-          </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <button className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-sm font-medium text-zinc-950 transition hover:bg-emerald-300">

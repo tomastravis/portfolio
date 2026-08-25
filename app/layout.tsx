@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { profile } from "./profile";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tom Travis | Data Engineering · AI · Software",
-  description: "Portfolio hero experience for Tom Travis, focused on data engineering, AI and software engineering.",
+  title: `${profile.name} | ${profile.headline.join(" · ")}`,
+  description: `Portfolio hero experience for ${profile.name}, focused on ${profile.headline.join(", ")}.`,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
