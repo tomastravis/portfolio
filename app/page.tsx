@@ -1,19 +1,39 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { resolveProfileIntent } from "./assistant";
+import { FormEvent, useState } from "react";
+import { CanonicalIntent, resolveIntentByCanonical, resolveProfileIntent } from "./assistant";
 import { profile } from "./profile";
 
 export default function Home() {
   const [query, setQuery] = useState("experience");
-  const [submittedQuery, setSubmittedQuery] = useState("experience");
+  const [activeResponse, setActiveResponse] = useState(() => resolveProfileIntent("experience"));
 
   const headline = profile.headline.join(" · ");
-  const activeResponse = useMemo(() => resolveProfileIntent(submittedQuery), [submittedQuery]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSubmittedQuery(query.trim() || "experience");
+
+    const nextQuery = query.trim() || "experience";
+
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question: nextQuery }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Assistant request failed");
+      }
+
+      const payload: { intent?: CanonicalIntent } = await response.json();
+      const canonicalIntent = payload.intent ?? "unknown";
+      setActiveResponse(resolveIntentByCanonical(canonicalIntent));
+    } catch {
+      setActiveResponse(resolveProfileIntent(nextQuery));
+    }
   };
 
   return (
