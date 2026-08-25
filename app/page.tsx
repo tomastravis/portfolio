@@ -1,8 +1,20 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+import { resolveProfileIntent } from "./assistant";
 import { profile } from "./profile";
 
 export default function Home() {
-  const prompts = ["Experience", "Projects", "Systems"];
+  const [query, setQuery] = useState("experience");
+  const [submittedQuery, setSubmittedQuery] = useState("experience");
+
   const headline = profile.headline.join(" · ");
+  const activeResponse = useMemo(() => resolveProfileIntent(submittedQuery), [submittedQuery]);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmittedQuery(query.trim() || "experience");
+  };
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#05070b] text-zinc-100 antialiased selection:bg-emerald-500/30 selection:text-white">
@@ -59,7 +71,7 @@ export default function Home() {
               <span className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Assistant</span>
             </div>
 
-            <div className="px-4 pb-4 pt-4">
+            <form onSubmit={handleSubmit} className="px-4 pb-4 pt-4">
               <label htmlFor="ask-tom" className="sr-only">
                 What would you like to know about Tom?
               </label>
@@ -68,13 +80,17 @@ export default function Home() {
                 <input
                   id="ask-tom"
                   type="text"
-                  defaultValue=""
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
                   placeholder="What would you like to know about Tom?"
                   aria-label="Ask about Tom"
                   className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
-            </div>
+              <button type="submit" className="sr-only">
+                Submit
+              </button>
+            </form>
           </div>
         </section>
 
@@ -92,13 +108,22 @@ export default function Home() {
 
             <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
               <div className="mb-3 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Context</div>
+              <div className="mb-3 text-sm font-medium text-zinc-200">{activeResponse.title}</div>
+              <div className="mb-3 text-xs uppercase tracking-[0.16em] text-zinc-400">{activeResponse.description}</div>
+
               <div className="space-y-3">
-                {prompts.map((item) => (
-                  <div key={item} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200">
-                    <span>{item}</span>
-                    <span className="text-zinc-500">01</span>
+                {activeResponse.items.length > 0 ? (
+                  activeResponse.items.map((item) => (
+                    <div key={`${activeResponse.title}-${item}`} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200">
+                      <span className="pr-4">{item}</span>
+                      <span className="text-zinc-500">01</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200">
+                    No structured entries available.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
