@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { CanonicalIntent, resolveIntentByCanonical, resolveProfileIntent } from "./assistant";
 import { profile } from "./profile";
 
@@ -9,6 +10,9 @@ export default function Home() {
   const [activeResponse, setActiveResponse] = useState(() => resolveProfileIntent("experience"));
 
   const headline = profile.headline.join(" · ");
+  const reduceMotion = useReducedMotion();
+  // Use motion components from motion/react. No framer-motion typing workaround needed.
+  const MDiv = motion.div;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,7 +122,11 @@ export default function Home() {
           <div className="absolute right-10 top-8 h-52 w-52 rounded-full bg-emerald-400/12 blur-3xl" aria-hidden="true" />
           <div className="absolute left-0 bottom-10 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" aria-hidden="true" />
 
-          <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-zinc-800/80 bg-[linear-gradient(180deg,rgba(10,14,20,0.95),rgba(6,9,12,0.82))] p-5 shadow-[0_40px_100px_rgba(2,6,23,0.75)]">
+          <MDiv
+            className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-zinc-800/80 bg-[linear-gradient(180deg,rgba(10,14,20,0.95),rgba(6,9,12,0.82))] p-5 shadow-[0_40px_100px_rgba(2,6,23,0.75)]"
+            layout
+            transition={reduceMotion ? { duration: 0 } : { layout: { type: "spring", stiffness: 320, damping: 34 } }}
+          >
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
               <span>System</span>
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">
@@ -126,26 +134,60 @@ export default function Home() {
               </span>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-              <div className="mb-3 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Context</div>
-              <div className="mb-3 text-sm font-medium text-zinc-200">{activeResponse.title}</div>
-              <div className="mb-3 text-xs uppercase tracking-[0.16em] text-zinc-400">{activeResponse.description}</div>
+            <AnimatePresence mode="wait">
+              <MDiv
+                key={activeResponse.title}
+                initial={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+                animate={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: [0.2, 0.9, 0.1, 1] }}
+                className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4"
+                layout
+              >
+                <div className="mb-3 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Context</div>
+                <div className="mb-3 text-sm font-medium text-zinc-200">{activeResponse.title}</div>
+                <div className="mb-3 text-xs uppercase tracking-[0.16em] text-zinc-400">{activeResponse.description}</div>
 
-              <div className="space-y-3">
-                {activeResponse.items.length > 0 ? (
-                  activeResponse.items.map((item) => (
-                    <div key={`${activeResponse.title}-${item}`} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200">
-                      <span className="pr-4">{item}</span>
-                      <span className="text-zinc-500">01</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200">
-                    No structured entries available.
-                  </div>
-                )}
-              </div>
-            </div>
+                <MDiv
+                  className="space-y-3"
+                  initial="hidden"
+                  animate="show"
+                  exit="hidden"
+                  variants={{
+                    hidden: {},
+                    show: {},
+                  }}
+                >
+                  {activeResponse.items.length > 0 ? (
+                    <MDiv
+                      className="space-y-3"
+                      variants={{
+                        hidden: { transition: { staggerChildren: reduceMotion ? 0 : 0 } },
+                        show: { transition: { staggerChildren: reduceMotion ? 0 : 0.06 } },
+                      }}
+                    >
+                      {activeResponse.items.map((item, idx) => (
+                        <MDiv
+                          key={`${activeResponse.title}-${item}`}
+                          className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200"
+                          initial={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+                          animate={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
+                          exit={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+                          transition={reduceMotion ? { duration: 0 } : { duration: 0.22 }}
+                        >
+                          <span className="pr-4">{item}</span>
+                          <span className="text-zinc-500">{String(idx + 1).padStart(2, "0")}</span>
+                        </MDiv>
+                      ))}
+                    </MDiv>
+                  ) : (
+                    <MDiv className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200" initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }} animate={{ opacity: 1 }} transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}>
+                      No structured entries available.
+                    </MDiv>
+                  )}
+                </MDiv>
+              </MDiv>
+            </AnimatePresence>
 
             <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
               <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Signal</div>
@@ -159,7 +201,7 @@ export default function Home() {
                 ))}
               </div>
             </div>
-          </div>
+          </MDiv>
         </aside>
       </main>
     </div>
