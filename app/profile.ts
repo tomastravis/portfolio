@@ -38,6 +38,9 @@ export type LanguageSkill = {
 
 export const profile = {
   name: "Tomás Travis Alonso Cremnitz",
+  contact: {
+    email: "tomasnataliaalbanes@gmail.com",
+  },
   headline: ["Data Engineering", "AI", "Software Engineering"],
   education: [
     {

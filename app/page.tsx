@@ -2,12 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
-import { CanonicalIntent, resolveIntentByCanonical, resolveProfileIntent } from "./assistant";
+import { AssistantIntentResponse, resolveIntentByCanonical, resolveProfileIntent } from "./assistant";
 import { profile } from "./profile";
 
 export default function Home() {
   const [query, setQuery] = useState("experience");
   const [activeResponse, setActiveResponse] = useState(() => resolveProfileIntent("experience"));
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [suggestContact, setSuggestContact] = useState(false);
 
   const headline = profile.headline.join(" · ");
   const reduceMotion = useReducedMotion();
@@ -32,11 +34,15 @@ export default function Home() {
         throw new Error("Assistant request failed");
       }
 
-      const payload: { intent?: CanonicalIntent } = await response.json();
+      const payload: Partial<AssistantIntentResponse> = await response.json();
       const canonicalIntent = payload.intent ?? "unknown";
       setActiveResponse(resolveIntentByCanonical(canonicalIntent));
+      setAnswer(payload.answer ?? null);
+      setSuggestContact(payload.suggestContact === true);
     } catch {
       setActiveResponse(resolveProfileIntent(nextQuery));
+      setAnswer(null);
+      setSuggestContact(false);
     }
   };
 
@@ -96,18 +102,18 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleSubmit} className="px-4 pb-4 pt-4">
-              <label htmlFor="ask-tom" className="sr-only">
-                What would you like to know about Tom?
+              <label htmlFor="ask-tomas" className="sr-only">
+                What would you like to know about Tomas?
               </label>
               <div className="flex items-center gap-2 rounded-2xl border border-zinc-700/80 bg-zinc-900/80 px-3 py-3 shadow-inner shadow-black/20">
                 <span className="text-sm text-zinc-400">Ask</span>
                 <input
-                  id="ask-tom"
+                  id="ask-tomas"
                   type="text"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="What would you like to know about Tom?"
-                  aria-label="Ask about Tom"
+                  placeholder="What would you like to know about Tomas?"
+                  aria-label="Ask about Tomas"
                   className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
@@ -115,6 +121,8 @@ export default function Home() {
                 Submit
               </button>
             </form>
+            {answer && <div className="border-t border-zinc-800/80 px-4 pb-4 text-sm leading-6 text-zinc-300">{answer}</div>}
+            {suggestContact && <a href={`mailto:${profile.contact.email}`} className="mx-4 mb-4 inline-flex rounded-full border border-emerald-400/40 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-300 hover:text-emerald-200">Message Tomas</a>}
           </div>
         </section>
 
