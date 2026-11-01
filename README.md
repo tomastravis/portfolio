@@ -20,6 +20,20 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Conversation checks
+
+Run the profile-grounding and follow-up regression cases with the installed TypeScript compiler and Node's test runner:
+
+```bash
+node --test --test-isolation=none tests/conversation.test.mjs
+```
+
+The assistant recognises recorded technologies and aliases, resolves follow-ups from the last six questions, and composes source-backed evidence panels. `/api/assistant` delivers newline-delimited JSON: an initial versioned `reply`, then a `done` event with the final answer. UI components and evidence come from the local profile, not executable model output.
+
+If `OPENAI_API_KEY` is configured on the server, broad overviews can receive optional AI phrasing. Named-technology evidence, proficiency limitations and focused research remain deterministic. Without that key, or if narration is unavailable, the profile-backed conversation still works. No key is exposed to the browser. Real voice capture/playback still needs physical-device validation.
+
+See [ROADMAP.md](ROADMAP.md) for completed work and remaining visual, streaming and device-validation tasks.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

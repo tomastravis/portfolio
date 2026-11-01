@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CANONICAL_INTENTS, CanonicalIntent, resolveCanonicalIntent, resolveIntentByCanonical } from "./assistant";
+import { CanonicalIntent } from "./assistant";
+import { acceptNarration, ConversationReply, resolveConversation } from "./conversation";
 import { profile } from "./profile";
 
-type Turn = { id: number; question: string; intent: CanonicalIntent; answer: string | null; contact: boolean; local: boolean };
+type Turn = { id: number; question: string; reply: ConversationReply; status: "pending" | "ready" | "failed" | "cancelled"; message?: string };
 type Recognition = {
   lang: string; interimResults: boolean; continuous: boolean;
   onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
@@ -51,14 +52,28 @@ function Mercury({ active }: { active: boolean }) {
   </div>;
 }
 
-function Evidence({ intent }: { intent: CanonicalIntent }) {
-  if (intent === "experience") return <ol className="timeline">{profile.experience.map(role => <li key={role.role}><span className="timeline-dot" /><div className="fact-date">{role.start} — {role.end}</div><h3>{role.role}</h3><p className="fact-subtitle">{role.company}</p><ul className="highlights">{role.highlights.map(item => <li key={item}>{item}</li>)}</ul></li>)}</ol>;
+function Evidence({ intent, ask, research }: { intent: CanonicalIntent; ask: (question: string) => void; research?: boolean }) {
+  if (intent === "experience") return <ol className="timeline">{[...profile.experience].filter(role => !research || role.role === "Deep Learning Research Assistant").sort((a, b) => (b.end === "Present" ? Infinity : Date.parse(b.end)) - (a.end === "Present" ? Infinity : Date.parse(a.end))).map(role => <li key={role.role}><span className="timeline-dot" /><div className="fact-date">{role.start} — {role.end}</div><h3>{role.role}</h3><p className="fact-subtitle">{role.company}</p><details open={research || undefined}><summary>Explore this role</summary><ul className="highlights">{role.highlights.map(item => <li key={item}>{item}</li>)}</ul></details></li>)}</ol>;
   if (intent === "education") return <ol className="timeline">{profile.education.map(item => <li key={item.degree}><span className="timeline-dot" /><div className="fact-date">{"range" in item ? item.range : `${item.start} — ${item.completed}`}</div><h3>{item.degree}</h3><p className="fact-subtitle">{item.institution}</p></li>)}</ol>;
-  if (intent === "skills") return <div className="skill-map">{profile.skills.map(group => <section key={group.category}><h3>{group.category}</h3><div className="tags">{group.items.map(item => <span key={item}>{item}</span>)}</div></section>)}</div>;
+  if (intent === "skills") return <div className="skill-map">{profile.skills.map(group => <section key={group.category}><h3>{group.category}</h3><div className="tags">{group.items.map(item => <button key={item} onClick={() => ask(`Tell me about ${item}`)}>{item}</button>)}</div></section>)}</div>;
   if (intent === "languages") return <dl className="language-list">{profile.languages.map(item => <div key={item.language}><dt>{item.language}</dt><dd>{item.level}</dd></div>)}</dl>;
   if (intent === "projects") return <p className="empty-fact">Project details haven’t been added to this profile yet. <a href={`mailto:${profile.contact.email}`}>Ask Tomas about his work.</a></p>;
   if (intent === "promotion") return <p className="empty-fact">The profile records a planned move from {profile.promotion.currentRole} to {profile.promotion.newRole} at {profile.promotion.company}, effective {profile.promotion.effective}. Confirmation of the change hasn’t been added.</p>;
   return <p className="empty-fact">I can show you the experience, skills, education and languages recorded in Tomas’s profile. Try asking about one of those.</p>;
+}
+
+function AnswerVisual({ reply, ask }: { reply: ConversationReply; ask: (question: string) => void }) {
+  if (reply.view.type === "clarification") return null;
+  if (reply.view.type === "profile") return <Evidence intent={reply.intent} ask={ask} research={reply.view.focus === "research"} />;
+  return <div className={`technology-evidence ${reply.view.type === "comparison" ? "comparison-evidence" : ""}`}>
+    {reply.view.technologies.map(technology => <section key={technology.name} className="technology-detail">
+      <div className="technology-header"><h3>{technology.name}</h3><span className="recorded-label">Listed in profile</span></div>
+      <p className="technology-category">{technology.category}</p>
+      <div className="evidence-row"><span>What the profile confirms</span><strong>{technology.evidence.length ? "Skill + work evidence" : "Listed skill"}</strong></div>
+      {technology.evidence.map((evidence, index) => <blockquote key={index}><p>{evidence.detail}</p><cite>{evidence.role} · {evidence.company}<br />{evidence.dates}</cite></blockquote>)}
+      <details className="source-disclosure"><summary>View source</summary><p>{technology.source}</p><p>Only explicit mentions in role descriptions are linked here. A listed skill alone doesn’t establish proficiency or a project outcome.</p></details>
+    </section>)}
+  </div>;
 }
 
 export default function Home() {
@@ -75,6 +90,7 @@ export default function Home() {
   const latest = useRef<HTMLElement>(null);
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
+  const spokenEnabled = useRef(false);
 
   useEffect(() => () => { recognition.current?.abort(); request.current?.abort(); window.speechSynthesis?.cancel(); }, []);
 
@@ -105,29 +121,57 @@ export default function Home() {
     try { session.start(); setListening(true); } catch { setListening(false); setNotice("Voice input couldn’t start. Please type your question instead."); }
   }
 
-  async function ask(question: string) {
+  async function ask(question: string, retryId?: number) {
     const clean = question.trim();
     if (!clean || busy.current || clean.length > 240) return;
     busy.current = true; setPending(true); setQuery(""); setNotice("");
     recognition.current?.abort(); setListening(false);
     window.speechSynthesis?.cancel(); setSpeaking(false);
+    const history = turns.filter(turn => turn.id !== retryId && turn.status === "ready").slice(-6).map(turn => turn.question);
+    const plan = resolveConversation(clean, history);
+    const id = retryId ?? (turns.at(-1)?.id ?? 0) + 1;
+    const turn: Turn = { id, question: clean, reply: plan, status: "pending" };
+    setTurns(previous => retryId ? previous.map(item => item.id === retryId ? turn : item) : [...previous, turn]);
     const controller = new AbortController(); request.current = controller;
     const timer = setTimeout(() => controller.abort(), 18000);
-    let intent = resolveCanonicalIntent(clean), answer: string | null = null, contact = false, local = false;
+    const update = (changes: Partial<Turn>) => setTurns(previous => previous.map(item => item.id === id ? { ...item, ...changes } : item));
+    // Keep the reading position steady as evidence arrives. Only move to the
+    // visitor's submitted question, once, if it isn't already on screen.
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`turn-${id}`);
+      if (element && element.getBoundingClientRect().top > window.innerHeight - 170) element.scrollIntoView({ behavior: "instant", block: "start" });
+    });
+    let answer = plan.answer;
     try {
-      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: clean }), signal: controller.signal });
-      if (!response.ok) throw new Error("Request unavailable");
-      const payload = await response.json();
-      if (!CANONICAL_INTENTS.includes(payload.intent)) throw new Error("Invalid response");
-      intent = payload.intent; answer = typeof payload.answer === "string" ? payload.answer : null; contact = payload.suggestContact === true;
-    } catch { local = true; }
-    finally { clearTimeout(timer); busy.current = false; setPending(false); }
-    setTurns(previous => [...previous, { id: Date.now(), question: clean, intent, answer, contact, local }]);
-    if (spoken) {
-      const facts = resolveIntentByCanonical(intent);
-      speak(answer ?? (intent === "unknown" ? "Try asking about experience, skills, education or languages." : intent === "promotion" ? `The profile records a planned move to Engineer at NTT DATA, effective ${profile.promotion.effective}. Confirmation hasn’t been added.` : `${facts.title}. ${facts.description}. ${facts.items.join(". ")}`));
+      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: clean, history }), signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(response.status === 429 ? "Too many questions. Please wait a moment and retry." : "The assistant service couldn’t connect. You can still explore the saved profile evidence.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "", complete = false;
+      while (true) {
+        const chunk = await reader.read();
+        buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+        const lines = buffer.split("\n"); buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line);
+          if (event.type === "reply" && event.reply?.version === 1) update({ reply: plan });
+          if (event.type === "done") {
+            const narration = acceptNarration(event, plan);
+            if (!narration) throw new Error("The assistant returned an unexpected answer. The saved facts are shown instead.");
+            answer = narration; complete = true;
+            update({ reply: { ...plan, answer }, status: "ready", message: event.mode === "fallback" ? "The AI service is unavailable; this answer uses the saved profile." : undefined });
+          }
+        }
+        if (chunk.done) break;
+      }
+      if (!complete) throw new Error("The response was interrupted. The saved profile is available below.");
+      if (spokenEnabled.current) speak(answer);
+    } catch (error) {
+      const cancelled = controller.signal.reason === "user";
+      update({ status: cancelled ? "cancelled" : "failed", message: cancelled ? "Stopped. Your question and its matching profile evidence are kept here." : error instanceof TypeError ? "The assistant service couldn’t connect. You can still explore the saved profile evidence." : error instanceof SyntaxError ? "The response was interrupted. The saved profile is available below." : error instanceof Error && error.name !== "AbortError" ? error.message : "The response took too long. Here’s the matching saved profile evidence." });
     }
-    requestAnimationFrame(() => latest.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }));
+    finally { clearTimeout(timer); busy.current = false; setPending(false); }
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void ask(query); }
@@ -138,20 +182,22 @@ export default function Home() {
       <section className="intro" aria-labelledby="intro-title">
         <Mercury active={listening || pending || speaking} />
         <div className="intro-copy"><p className="intro-kicker">A different way to get to know me</p><h1 id="intro-title">Tomas Travis <span>AI</span></h1><p className="intro-description">A conversation, not a résumé.<br />Ask about my work. See the story take shape.</p></div>
-        <div className="suggestions" aria-label="Suggested questions">{[{ label: "My experience", question: "Show me your experience" }, { label: "What I work with", question: "What technologies do you use?" }, { label: "My education", question: "What did you study?" }].map(item => <button key={item.label} disabled={pending || listening} onClick={() => void ask(item.question)}>{item.label}<span><Icon name="arrow" /></span></button>)}</div>
+        {!turns.length && <div className="suggestions" aria-label="Suggested questions">{[{ label: "My experience", question: "Show me your experience" }, { label: "What I work with", question: "What technologies do you use?" }, { label: "My education", question: "What did you study?" }].map(item => <button key={item.label} disabled={pending || listening} onClick={() => void ask(item.question)}>{item.label}<span><Icon name="arrow" /></span></button>)}</div>}
       </section>
-      <p className="sr-only" role="status">{turns.length ? `Answer ${turns.length} ready: ${resolveIntentByCanonical(turns[turns.length - 1].intent).title}.` : ""}</p>
+      <p className="sr-only" role="status">{turns.length ? `${pending ? "Preparing" : "Updated"} answer ${turns.length}: ${turns[turns.length - 1].reply.title}.` : ""}</p>
       <div className="conversation" aria-label="Conversation with Tomas Travis AI" aria-busy={pending}>
-        {turns.map((turn, index) => <section key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className="answer-section" aria-label={`Answer to ${turn.question}`}>
+        {turns.map((turn, index) => <section id={`turn-${turn.id}`} key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className="answer-section" aria-label={`Answer to ${turn.question}`}>
           <div className="question-bubble">{turn.question}</div>
           <div className="answer-heading"><span className="answer-mark" aria-hidden="true">t.</span><span>Tomas Travis AI</span><span className="source-note">From my profile</span></div>
-          {turn.local && <p className="fallback-note">The assistant couldn’t connect. Here are the matching facts saved in my profile.</p>}
-          {turn.answer && <p className="answer-prose">{turn.answer}</p>}
-          <h2>{turn.intent === "unknown" ? "Let’s find a starting point" : resolveIntentByCanonical(turn.intent).title}</h2>
-          <Evidence intent={turn.intent} />
-          {turn.contact && <a className="answer-contact" href={`mailto:${profile.contact.email}`}>Ask Tomas directly ↗</a>}
+          {turn.message && <p className="fallback-note" role="status">{turn.message}</p>}
+          <h2>{turn.reply.title}</h2>
+          <p className="answer-prose">{turn.reply.answer}</p>
+          <AnswerVisual reply={turn.reply} ask={question => { if (!pending && !listening) void ask(question); }} />
+          {turn.reply.suggestContact && <a className="answer-contact" href={`mailto:${profile.contact.email}`}>Ask Tomas directly <Icon name="arrow" /></a>}
+          {(turn.status === "failed" || turn.status === "cancelled") && <button className="retry-button" disabled={pending} onClick={() => void ask(turn.question, turn.id)}>Retry this question</button>}
+          {index === turns.length - 1 && <div className="followups" aria-label="Continue the conversation">{turn.reply.followups.map(question => <button key={question} disabled={pending || listening} onClick={() => void ask(question)}>{question}<span aria-hidden="true"> →</span></button>)}</div>}
         </section>)}
-        {pending && <p role="status" className="thinking"><span />Finding the relevant details…</p>}
+        {pending && <p role="status" className="thinking"><span />Checking the profile… <button onClick={() => request.current?.abort("user")}>Stop response</button></p>}
       </div>
       <div className="composer-dock">
         <form className={`composer ${listening ? "is-listening" : ""}`} onSubmit={submit}>
@@ -160,7 +206,7 @@ export default function Home() {
           <button type="button" className="icon-button mic-button" onClick={toggleVoice} disabled={pending} aria-label={listening ? "Stop recording" : "Dictate a question"} aria-pressed={listening}><Icon name={listening ? "stop" : "mic"} /></button>
           <button type="submit" className="send-button" aria-label="Send question" disabled={!query.trim() || pending || listening}><Icon name="arrow" /></button>
         </form>
-        <div className="composer-meta"><span>{listening ? "Listening · tap stop to finish" : "Your questions. My experience."}</span><button type="button" aria-pressed={spoken} onClick={() => { if (spoken) { window.speechSynthesis?.cancel(); setSpeaking(false); } setSpoken(!spoken); }}><Icon name="sound" />Spoken replies {spoken ? "on" : "off"}</button></div>
+        <div className="composer-meta"><span>{listening ? "Listening · tap stop to finish" : "Your questions. My experience."}</span><button type="button" aria-pressed={spoken} onClick={() => { if (spoken) { window.speechSynthesis?.cancel(); setSpeaking(false); } spokenEnabled.current = !spoken; setSpoken(!spoken); }}><Icon name="sound" />Spoken replies {spoken ? "on" : "off"}</button></div>
         {speaking && <button className="stop-speaking" onClick={() => { window.speechSynthesis?.cancel(); setSpeaking(false); }}>Stop speaking</button>}
         <p className="voice-notice" role="status">{notice}</p>
       </div>
