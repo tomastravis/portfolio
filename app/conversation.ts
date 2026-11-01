@@ -1,17 +1,20 @@
 import { CanonicalIntent, getFactsForScopes, resolveCanonicalIntent } from "./assistant";
 import { profile } from "./profile";
+import { explicitLanguage, Language, languageFor, normaliseText, toRoutingEnglish } from "./i18n";
+import { spanishReply } from "./replies.es";
 
 export type TechnologyFact = { name: string; category: string; source: string; evidence: { role: string; company: string; dates: string; detail: string }[] };
 export type ConversationView =
   | { type: "technology"; technologies: TechnologyFact[] }
   | { type: "comparison"; technologies: TechnologyFact[] }
   | { type: "profile"; intent: CanonicalIntent; focus?: "research" }
-  | { type: "conversation"; kind: "greeting" | "casual" | "introduction" | "assistant" | "acknowledgement" | "goodbye" | "boundary" | "support" }
+  | { type: "conversation"; kind: "greeting" | "casual" | "introduction" | "assistant" | "acknowledgement" | "goodbye" | "boundary" | "support" | "language" }
   | { type: "clarification" };
 export type ConversationReply = {
-  version: 1; intent: CanonicalIntent; title: string; answer: string;
+  version: 1; language: Language; intent: CanonicalIntent; title: string; answer: string;
   view: ConversationView; followups: string[]; suggestContact: boolean;
 };
+type EnglishReply = Omit<ConversationReply, "language">;
 
 const aliases: Record<string, string[]> = {
   PySpark: ["spark", "apache spark", "pyspark"],
@@ -55,7 +58,7 @@ function normaliseOpening(question: string) {
   return question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[’‘]/g, "'").replace(/\bwho'?s\b/g, "who is").replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function conversationKind(question: string): Exclude<Extract<ConversationView, { type: "conversation" }>["kind"], "boundary" | "support"> | null {
+function conversationKind(question: string): Exclude<Extract<ConversationView, { type: "conversation" }>["kind"], "boundary" | "support" | "language"> | null {
   const text = normaliseOpening(question);
   if (/^(?:(?:hey+|hi+|hello|yo|hiya|howdy)(?: there| again| tomas(?: travis)?)?|good (?:morning|afternoon|evening))$/.test(text)) return "greeting";
   const direct = text.replace(/^(?:hey|hi|hello)(?: there)?\s+/, "");
@@ -67,7 +70,7 @@ function conversationKind(question: string): Exclude<Extract<ConversationView, {
   return null;
 }
 
-function conversationalReply(question: string, history: string[]): ConversationReply | null {
+function conversationalReply(question: string, history: string[]): EnglishReply | null {
   let kind = conversationKind(question);
   const previous = readHistory(history);
   if (/^(?:yes|yeah|yep|sure|please|go ahead|yes please)$/i.test(normaliseOpening(question))) {
@@ -97,6 +100,7 @@ const followupPattern = /\b(it|that|those|them|there|more|else|where did|where h
 const insistencePattern = /^(?:do it anyway|just do it|just this once|come on|try anyway|please|please do it)$/;
 
 export function classifyScope(question: string): ScopeReason | null {
+  question = toRoutingEnglish(question);
   const text = normaliseOpening(question.replace(/[\u200B-\u200D\uFEFF]/g, ""));
   if (/\b(?:kill myself|hurt myself|end my life|want to die|suicidal|in immediate danger|not safe right now)\b/.test(text)) return "urgent";
   if (/\b(?:i am|i'm|im|i feel) (?:really |so |very )?(?:depressed|grieving|scared|unsafe)|\b(?:i need (?:medical|legal|mental health) (?:advice|help)|i(?:'m| am) having a panic attack)|\b(?:my (?:dad|mom|mum|mother|father|partner|friend) (?:died|passed away)|i lost my (?:dad|mom|mum|mother|father|partner|friend))\b/.test(text)) return "support";
@@ -118,7 +122,7 @@ export function classifyScope(question: string): ScopeReason | null {
   return "unrelated";
 }
 
-function scopeReply(question: string, history: string[]): ConversationReply | null {
+function scopeReply(question: string, history: string[]): EnglishReply | null {
   let reason = classifyScope(question);
   const previous = readHistory(history);
   if (insistencePattern.test(normaliseOpening(question)) && previous.length) {
@@ -157,10 +161,10 @@ function scopeReply(question: string, history: string[]): ConversationReply | nu
 export function narrationContext(reply: ConversationReply) {
   // Only application-owned facts and resolved copy enter the optional model.
   // Never include raw visitor questions or conversation history here.
-  return { intent: reply.intent, facts: getFactsForScopes([reply.intent]), groundedAnswer: reply.answer };
+  return { language: reply.language, intent: reply.intent, facts: getFactsForScopes([reply.intent]), groundedAnswer: reply.answer };
 }
 
-export function resolveConversation(question: string, history: string[] = []): ConversationReply {
+function resolveEnglishConversation(question: string, history: string[] = []): EnglishReply {
   const clean = question.trim().slice(0, 240);
   const boundary = scopeReply(clean, history);
   if (boundary) return boundary;
@@ -224,10 +228,21 @@ export function resolveConversation(question: string, history: string[] = []): C
   }
 }
 
+export function resolveConversation(question: string, history: string[] = [], preferredLanguage?: Language): ConversationReply {
+  const bounded = readHistory(history);
+  const fallback = preferredLanguage ?? bounded.reduce<Language>((language, item) => languageFor(item, language), "en");
+  const language = languageFor(question, fallback);
+  const canonical = toRoutingEnglish(question);
+  const command = explicitLanguage(question) && normaliseText(question).split(" ").every(word => ["responde", "contesta", "habla", "hablemos", "hablar", "cambia", "cambiar", "sigue", "continua", "puedes", "podemos", "en", "al", "a", "in", "speak", "talk", "answer", "respond", "reply", "continue", "switch", "can", "could", "would", "you", "we", "to", "spanish", "espanol", "english", "ingles", "please", "por", "favor"].includes(word));
+  if (command) return { version: 1, language, intent: "unknown", title: language === "es" ? "Idioma" : "Language", answer: language === "es" ? "Claro, seguimos en español. ¿Qué te gustaría saber de Tomas?" : "Of course—we can continue in English. What would you like to know about Tomas?", view: { type: "conversation", kind: "language" }, followups: language === "es" ? ["¿Quién es Tomas?", "Muéstrame su experiencia"] : ["Who is Tomas?", "Show me his experience"], suggestContact: false };
+  const reply = { ...resolveEnglishConversation(canonical, bounded.map(toRoutingEnglish).filter(Boolean)), language };
+  return language === "es" ? spanishReply(reply, canonical) : reply;
+}
+
 // Only this versioned, known component vocabulary crosses the network boundary.
 // Evidence and UI are rebuilt from profile data, never accepted as executable model output.
 export function acceptNarration(value: unknown, expected: ConversationReply): string | null {
   if (!value || typeof value !== "object") return null;
-  const candidate = value as { intent?: unknown; answer?: unknown };
-  return candidate.intent === expected.intent && typeof candidate.answer === "string" && candidate.answer.trim().length > 0 && candidate.answer.length <= 1800 ? candidate.answer.trim() : null;
+  const candidate = value as { intent?: unknown; answer?: unknown; language?: unknown };
+  return candidate.intent === expected.intent && (candidate.language === undefined || candidate.language === expected.language) && typeof candidate.answer === "string" && candidate.answer.trim().length > 0 && candidate.answer.length <= 1800 ? candidate.answer.trim() : null;
 }

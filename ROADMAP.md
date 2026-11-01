@@ -4,7 +4,7 @@ The first conversation canvas is a starting point. The next iteration should fee
 
 ## Current focus: natural conversation
 
-Work on one improvement at a time, validate it carefully, and finish it before moving to the next queued feature. The greeting/introduction and initial scope/personality passes are complete. Bilingual support and the liquid visual remain separate follow-up tasks.
+Work on one improvement at a time, validate it carefully, and finish it before moving to the next queued feature. The greeting/introduction, initial scope/personality and initial English/Spanish passes are complete. Physical-phone voice validation and the liquid visual remain follow-up tasks.
 
 - [x] Handle greetings and casual openings such as "hey" and "what's up" with short, natural replies, without missing-evidence disclaimers or unnecessary UI panels.
 - [x] Recognise "who is Tomas?" and common introductory paraphrases, and answer from the verified profile instead of showing a generic clarification.
@@ -23,13 +23,16 @@ Research and design rationale: [natural-conversation notes](docs/research/2026-1
 
 Research and limits: [scope/personality notes](docs/research/2026-11-01-scope-and-personality.md). The English pattern-based routing is an initial product boundary, not an exhaustive semantic classifier or proof against all prompt-injection attempts.
 
-## Queued: Spanish and English
+## Completed: initial Spanish and English support
 
-- [ ] Support natural conversation in English and Spanish, following the visitor's language and allowing an explicit switch during a conversation without losing context.
-- [ ] Localise the complete interaction: answers, greetings, uncertainty, playful redirects, suggested questions, evidence labels, loading/errors and accessibility labels. Preserve original technology names, institutions, qualifications and source facts.
-- [ ] Support Spanish and English phrasing, accents and colloquial openings in routing and follow-ups; handle mixed-language questions and language-switch requests explicitly.
-- [ ] Match dictation language and spoken replies to the selected conversation language, with appropriate fallbacks for available browser voices. Verify on physical phones rather than assuming browser support.
-- [ ] Test equivalent Spanish/English scenarios, including Spark proficiency, pronoun follow-ups, greetings, profile introductions, unrelated coding requests and switching languages mid-conversation. Factual grounding must remain identical in both languages.
+- [x] Add English/Español selection, recognised question-language cues, explicit chat switches and per-answer language tags. Preserve the conversation and follow-up subject across switches.
+- [x] Localise answers, greetings, uncertainty, playful redirects, follow-ups, evidence labels/highlights/dates, loading/errors and accessibility labels. Preserve original technology, institution, qualification and role names and the underlying facts.
+- [x] Cover common Spanish/English phrasing, accents, casual openings, mixed-language follow-ups and explicit language requests. Distinguish questions about Tomas's language proficiency from commands to change language.
+- [x] Wire dictation to `en-US` / `es-ES` and synthesis to the answer language with matching available voices and localised fallbacks. Verify transcript editing, language tags, voice selection, absent-voice and permission states using browser simulations.
+- [ ] Validate real microphone capture, playback and browser voice availability on physical phones, including mobile Safari. Simulated API tests do not establish audio quality or service availability.
+- [x] Pass all 33 resolver/dictionary regressions, lint, TypeScript and the webpack production build. Verify Spanish/English UI, source evidence, context-preserving switches, scope redirects, localised network errors and stream/validation responses in the production browser/API checks; inspect 320px, 390px and desktop layouts.
+
+Sources, approach and access limits: [Spanish/English research](docs/research/2026-11-01-spanish-english.md). This first pass uses authored translations and a bounded bilingual routing vocabulary, not a universal translator. The public discussion feed was denied; no current community-consensus claim is made.
 
 ## Next: conversational intelligence
 

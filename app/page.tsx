@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CanonicalIntent } from "./assistant";
 import { acceptNarration, ConversationReply, resolveConversation } from "./conversation";
 import { profile } from "./profile";
+import { Language, profileText, speechLanguage, ui } from "./i18n";
 
 type Turn = { id: number; question: string; reply: ConversationReply; status: "pending" | "ready" | "failed" | "cancelled"; message?: string };
 type Recognition = {
@@ -52,26 +53,28 @@ function Mercury({ active }: { active: boolean }) {
   </div>;
 }
 
-function Evidence({ intent, ask, research }: { intent: CanonicalIntent; ask: (question: string) => void; research?: boolean }) {
-  if (intent === "experience") return <ol className="timeline">{[...profile.experience].filter(role => !research || role.role === "Deep Learning Research Assistant").sort((a, b) => (b.end === "Present" ? Infinity : Date.parse(b.end)) - (a.end === "Present" ? Infinity : Date.parse(a.end))).map(role => <li key={role.role}><span className="timeline-dot" /><div className="fact-date">{role.start} — {role.end}</div><h3>{role.role}</h3><p className="fact-subtitle">{role.company}</p><details open={research || undefined}><summary>Explore this role</summary><ul className="highlights">{role.highlights.map(item => <li key={item}>{item}</li>)}</ul></details></li>)}</ol>;
-  if (intent === "education") return <ol className="timeline">{profile.education.map(item => <li key={item.degree}><span className="timeline-dot" /><div className="fact-date">{"range" in item ? item.range : `${item.start} — ${item.completed}`}</div><h3>{item.degree}</h3><p className="fact-subtitle">{item.institution}</p></li>)}</ol>;
-  if (intent === "skills") return <div className="skill-map">{profile.skills.map(group => <section key={group.category}><h3>{group.category}</h3><div className="tags">{group.items.map(item => <button key={item} onClick={() => ask(`Tell me about ${item}`)}>{item}</button>)}</div></section>)}</div>;
-  if (intent === "languages") return <dl className="language-list">{profile.languages.map(item => <div key={item.language}><dt>{item.language}</dt><dd>{item.level}</dd></div>)}</dl>;
-  if (intent === "projects") return <p className="empty-fact">Project details haven’t been added to this profile yet. <a href={`mailto:${profile.contact.email}`}>Ask Tomas about his work.</a></p>;
-  if (intent === "promotion") return <p className="empty-fact">The profile records a planned move from {profile.promotion.currentRole} to {profile.promotion.newRole} at {profile.promotion.company}, effective {profile.promotion.effective}. Confirmation of the change hasn’t been added.</p>;
-  return <p className="empty-fact">I can show you the experience, skills, education and languages recorded in Tomas’s profile. Try asking about one of those.</p>;
+function Evidence({ intent, ask, research, language }: { intent: CanonicalIntent; ask: (question: string) => void; research?: boolean; language: Language }) {
+  const t = ui[language];
+  if (intent === "experience") return <ol className="timeline">{[...profile.experience].filter(role => !research || role.role === "Deep Learning Research Assistant").sort((a, b) => (b.end === "Present" ? Infinity : Date.parse(b.end)) - (a.end === "Present" ? Infinity : Date.parse(a.end))).map(role => <li key={role.role}><span className="timeline-dot" /><div className="fact-date">{profileText(`${role.start} — ${role.end}`, language)}</div><h3 lang="en">{role.role}</h3><p className="fact-subtitle">{role.company}</p><details open={research || undefined}><summary>{t.role}</summary><ul className="highlights">{role.highlights.map(item => <li key={item}>{profileText(item, language)}</li>)}</ul></details></li>)}</ol>;
+  if (intent === "education") return <ol className="timeline">{profile.education.map(item => <li key={item.degree}><span className="timeline-dot" /><div className="fact-date">{profileText("range" in item ? item.range : `${item.start} — ${item.completed}`, language)}</div><h3 lang={item.degree === "Erasmus" ? undefined : "en"}>{item.degree}</h3><p className="fact-subtitle">{item.institution}</p></li>)}</ol>;
+  if (intent === "skills") return <div className="skill-map">{profile.skills.map(group => <section key={group.category}><h3>{profileText(group.category, language)}</h3><div className="tags">{group.items.map(item => <button key={item} onClick={() => ask(language === "es" ? `Háblame de ${item}` : `Tell me about ${item}`)}>{item}</button>)}</div></section>)}</div>;
+  if (intent === "languages") return <dl className="language-list">{profile.languages.map(item => <div key={item.language}><dt>{profileText(item.language, language)}</dt><dd>{profileText(item.level, language)}</dd></div>)}</dl>;
+  if (intent === "projects") return <p className="empty-fact">{t.noProjects} <a href={`mailto:${profile.contact.email}`}>{t.askWork}</a></p>;
+  if (intent === "promotion") return <p className="empty-fact">{t.planned}</p>;
+  return <p className="empty-fact">{t.empty}</p>;
 }
 
 function AnswerVisual({ reply, ask }: { reply: ConversationReply; ask: (question: string) => void }) {
+  const t = ui[reply.language];
   if (reply.view.type === "clarification" || reply.view.type === "conversation") return null;
-  if (reply.view.type === "profile") return <Evidence intent={reply.intent} ask={ask} research={reply.view.focus === "research"} />;
+  if (reply.view.type === "profile") return <Evidence intent={reply.intent} ask={ask} research={reply.view.focus === "research"} language={reply.language} />;
   return <div className={`technology-evidence ${reply.view.type === "comparison" ? "comparison-evidence" : ""}`}>
     {reply.view.technologies.map(technology => <section key={technology.name} className="technology-detail">
-      <div className="technology-header"><h3>{technology.name}</h3><span className="recorded-label">Listed in profile</span></div>
-      <p className="technology-category">{technology.category}</p>
-      <div className="evidence-row"><span>What the profile confirms</span><strong>{technology.evidence.length ? "Skill + work evidence" : "Listed skill"}</strong></div>
-      {technology.evidence.map((evidence, index) => <blockquote key={index}><p>{evidence.detail}</p><cite>{evidence.role} · {evidence.company}<br />{evidence.dates}</cite></blockquote>)}
-      <details className="source-disclosure"><summary>View source</summary><p>{technology.source}</p><p>Only explicit mentions in role descriptions are linked here. A listed skill alone doesn’t establish proficiency or a project outcome.</p></details>
+      <div className="technology-header"><h3>{technology.name}</h3><span className="recorded-label">{t.listed}</span></div>
+      <p className="technology-category">{profileText(technology.category, reply.language)}</p>
+      <div className="evidence-row"><span>{t.confirms}</span><strong>{technology.evidence.length ? t.evidence : t.listedSkill}</strong></div>
+      {technology.evidence.map((evidence, index) => <blockquote key={index}><p>{profileText(evidence.detail, reply.language)}</p><cite><span lang="en">{evidence.role}</span> · {evidence.company}<br />{profileText(evidence.dates, reply.language)}</cite></blockquote>)}
+      <details className="source-disclosure"><summary>{t.viewSource}</summary><p>{profileText(technology.source, reply.language)}</p><p>{t.sourceCaveat}</p></details>
     </section>)}
   </div>;
 }
@@ -85,6 +88,8 @@ export default function Home() {
   const [speaking, setSpeaking] = useState(false);
   const [notice, setNotice] = useState("");
   const [motionPaused, setMotionPaused] = useState(false);
+  const [language, setLanguage] = useState<Language>("en");
+  const t = ui[language];
   const recognition = useRef<Recognition | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const latest = useRef<HTMLElement>(null);
@@ -93,15 +98,26 @@ export default function Home() {
   const spokenEnabled = useRef(false);
 
   useEffect(() => () => { recognition.current?.abort(); request.current?.abort(); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => { document.documentElement.lang = language; }, [language]);
 
-  function speak(text: string) {
-    if (!("speechSynthesis" in window)) { setNotice("Spoken replies aren’t available in this browser. You can read every answer here."); return; }
+  function changeLanguage(next: Language) {
+    recognition.current?.abort(); window.speechSynthesis?.cancel();
+    setListening(false); setSpeaking(false); setNotice(""); setLanguage(next);
+  }
+
+  function speak(text: string, spokenLanguage: Language) {
+    const messages = ui[spokenLanguage];
+    if (!("speechSynthesis" in window)) { setNotice(messages.noSpeech); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US"; utterance.rate = 1;
+    utterance.lang = speechLanguage[spokenLanguage]; utterance.rate = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find(item => item.lang === utterance.lang) ?? voices.find(item => item.lang.toLowerCase().startsWith(spokenLanguage));
+    if (voice) utterance.voice = voice;
+    else if (voices.length) { setNotice(messages.noVoice); return; }
     utterance.onstart = () => setSpeaking(true);
     utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => { setSpeaking(false); setNotice("Audio playback stopped. The full answer is available on screen."); };
+    utterance.onerror = event => { setSpeaking(false); if (!["canceled", "interrupted"].includes(event.error)) setNotice(messages.audioStopped); };
     window.speechSynthesis.speak(utterance);
   }
 
@@ -109,16 +125,16 @@ export default function Home() {
     if (listening) { recognition.current?.stop(); return; }
     const browser = window as typeof window & { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
     const Constructor = browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
-    if (!Constructor) { setNotice("Voice input isn’t available in this browser. Try your phone keyboard’s dictation button, or type below."); input.current?.focus(); return; }
+    if (!Constructor) { setNotice(t.noRecognition); input.current?.focus(); return; }
     window.speechSynthesis?.cancel(); setSpeaking(false);
     const session = new Constructor();
-    session.lang = "en-US"; session.interimResults = false; session.continuous = false;
+    session.lang = speechLanguage[language]; session.interimResults = false; session.continuous = false;
     session.onresult = event => { setQuery(event.results[0][0].transcript.slice(0, 240)); input.current?.focus(); };
-    session.onerror = event => { setListening(false); setNotice(event.error === "not-allowed" ? "Microphone access wasn’t allowed. You can enable it in browser settings or keep typing." : "I couldn’t capture that. Please try again or type your question."); };
+    session.onerror = event => { setListening(false); if (event.error !== "aborted") setNotice(event.error === "not-allowed" ? t.permission : t.capture); };
     session.onend = () => setListening(false);
     recognition.current = session;
-    setNotice("Your browser may use its speech service to transcribe audio. Review the text before sending.");
-    try { session.start(); setListening(true); } catch { setListening(false); setNotice("Voice input couldn’t start. Please type your question instead."); }
+    setNotice(t.privacy);
+    try { session.start(); setListening(true); } catch { setListening(false); setNotice(t.startVoice); }
   }
 
   async function ask(question: string, retryId?: number) {
@@ -128,7 +144,9 @@ export default function Home() {
     recognition.current?.abort(); setListening(false);
     window.speechSynthesis?.cancel(); setSpeaking(false);
     const history = turns.filter(turn => turn.id !== retryId && turn.status === "ready").slice(-6).map(turn => turn.question);
-    const plan = resolveConversation(clean, history);
+    const plan = resolveConversation(clean, history, language);
+    const messages = ui[plan.language];
+    setLanguage(plan.language);
     const id = retryId ?? (turns.at(-1)?.id ?? 0) + 1;
     const turn: Turn = { id, question: clean, reply: plan, status: "pending" };
     setTurns(previous => retryId ? previous.map(item => item.id === retryId ? turn : item) : [...previous, turn]);
@@ -143,8 +161,8 @@ export default function Home() {
     });
     let answer = plan.answer;
     try {
-      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: clean, history }), signal: controller.signal });
-      if (!response.ok || !response.body) throw new Error(response.status === 429 ? "Too many questions. Please wait a moment and retry." : "The assistant service couldn’t connect. You can still explore the saved profile evidence.");
+      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json", "Accept-Language": plan.language }, body: JSON.stringify({ question: clean, history, language: plan.language }), signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(response.status === 429 ? messages.rateLimit : messages.connection);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "", complete = false;
@@ -158,18 +176,18 @@ export default function Home() {
           if (event.type === "reply" && event.reply?.version === 1) update({ reply: plan });
           if (event.type === "done") {
             const narration = acceptNarration(event, plan);
-            if (!narration) throw new Error("The assistant returned an unexpected answer. The saved facts are shown instead.");
+            if (!narration) throw new Error(messages.unexpected);
             answer = narration; complete = true;
-            update({ reply: { ...plan, answer }, status: "ready", message: event.mode === "fallback" ? "The AI service is unavailable; this answer uses the saved profile." : undefined });
+            update({ reply: { ...plan, answer }, status: "ready", message: event.mode === "fallback" ? messages.aiUnavailable : undefined });
           }
         }
         if (chunk.done) break;
       }
-      if (!complete) throw new Error("The response was interrupted. The saved profile is available below.");
-      if (spokenEnabled.current) speak(answer);
+      if (!complete) throw new Error(messages.interrupted);
+      if (spokenEnabled.current) speak(answer, plan.language);
     } catch (error) {
       const cancelled = controller.signal.reason === "user";
-      update({ status: cancelled ? "cancelled" : "failed", message: cancelled ? "Stopped. Your question and its matching profile evidence are kept here." : error instanceof TypeError ? "The assistant service couldn’t connect. You can still explore the saved profile evidence." : error instanceof SyntaxError ? "The response was interrupted. The saved profile is available below." : error instanceof Error && error.name !== "AbortError" ? error.message : "The response took too long. Here’s the matching saved profile evidence." });
+      update({ status: cancelled ? "cancelled" : "failed", message: cancelled ? messages.stopped : error instanceof TypeError ? messages.connection : error instanceof SyntaxError ? messages.interrupted : error instanceof Error && error.name !== "AbortError" ? error.message : messages.timeout });
     }
     finally { clearTimeout(timer); busy.current = false; setPending(false); }
   }
@@ -177,40 +195,40 @@ export default function Home() {
   function submit(event: FormEvent) { event.preventDefault(); void ask(query); }
 
   return <div className={`portfolio ${turns.length ? "has-conversation" : ""} ${motionPaused ? "motion-paused" : ""}`}>
-    <header className="site-header"><Link href="/" className="wordmark" aria-label="Tomas Travis home"><span className="monogram">t.</span><span>Tomas Travis</span></Link><a className="contact-link" href={`mailto:${profile.contact.email}`}>Get in touch <span><Icon name="arrow" /></span></a></header>
+    <header className="site-header"><Link href="/" className="wordmark" aria-label={t.home}><span className="monogram">t.</span><span>Tomas Travis</span></Link><div className="header-actions"><label className="sr-only" htmlFor="language">{t.language}</label><select id="language" value={language} disabled={pending} onChange={event => changeLanguage(event.target.value as Language)}><option value="en" lang="en">English</option><option value="es" lang="es">Español</option></select><a className="contact-link" href={`mailto:${profile.contact.email}`}>{t.contact} <span><Icon name="arrow" /></span></a></div></header>
     <main>
       <section className="intro" aria-labelledby="intro-title">
         <Mercury active={listening || pending || speaking} />
-        <div className="intro-copy"><p className="intro-kicker">A different way to get to know me</p><h1 id="intro-title">Tomas Travis <span>AI</span></h1><p className="intro-description">A conversation, not a résumé.<br />Ask about my work. See the story take shape.</p></div>
-        {!turns.length && <div className="suggestions" aria-label="Suggested questions">{[{ label: "My experience", question: "Show me your experience" }, { label: "What I work with", question: "What technologies do you use?" }, { label: "My education", question: "What did you study?" }].map(item => <button key={item.label} disabled={pending || listening} onClick={() => void ask(item.question)}>{item.label}<span><Icon name="arrow" /></span></button>)}</div>}
+        <div className="intro-copy"><p className="intro-kicker">{t.kicker}</p><h1 id="intro-title">Tomas Travis <span>{language === "es" ? "IA" : "AI"}</span></h1><p className="intro-description">{t.intro}<br />{t.introMore}</p></div>
+        {!turns.length && <div className="suggestions" aria-label={t.suggested}>{[{ label: t.experience, question: t.askExperience }, { label: t.skills, question: t.askSkills }, { label: t.education, question: t.askEducation }].map(item => <button key={item.label} disabled={pending || listening} onClick={() => void ask(item.question)}>{item.label}<span><Icon name="arrow" /></span></button>)}</div>}
       </section>
-      <p className="sr-only" role="status">{turns.length ? `${pending ? "Preparing" : "Updated"} answer ${turns.length}: ${turns[turns.length - 1].reply.title}.` : ""}</p>
-      <div className="conversation" aria-label="Conversation with Tomas Travis AI" aria-busy={pending}>
-        {turns.map((turn, index) => <section id={`turn-${turn.id}`} key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className={`answer-section ${turn.reply.view.type === "conversation" ? "conversational-answer" : ""}`} aria-label={`Answer to ${turn.question}`}>
+      <p className="sr-only" role="status">{turns.length ? `${pending ? t.preparing : t.updated}: ${t.answer} ${turns.length}, ${turns[turns.length - 1].reply.title}.` : ""}</p>
+      <div className="conversation" aria-label={t.conversation} aria-busy={pending}>
+        {turns.map((turn, index) => { const tt = ui[turn.reply.language]; return <section lang={turn.reply.language} id={`turn-${turn.id}`} key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className={`answer-section ${turn.reply.view.type === "conversation" ? "conversational-answer" : ""}`} aria-label={`${tt.answer}: ${turn.question}`}>
           <div className="question-bubble">{turn.question}</div>
-          <div className="answer-heading"><span className="answer-mark" aria-hidden="true">t.</span><span>Tomas Travis AI</span>{turn.reply.view.type !== "conversation" && <span className="source-note">From my profile</span>}</div>
+          <div className="answer-heading"><span className="answer-mark" aria-hidden="true">t.</span><span>Tomas Travis {turn.reply.language === "es" ? "IA" : "AI"}</span>{turn.reply.view.type !== "conversation" && <span className="source-note">{tt.source}</span>}</div>
           {turn.message && <p className="fallback-note" role="status">{turn.message}</p>}
           {turn.reply.view.type !== "conversation" && <h2>{turn.reply.title}</h2>}
           <p className="answer-prose">{turn.reply.answer}</p>
           <AnswerVisual reply={turn.reply} ask={question => { if (!pending && !listening) void ask(question); }} />
-          {turn.reply.suggestContact && <a className="answer-contact" href={`mailto:${profile.contact.email}`}>Ask Tomas directly <Icon name="arrow" /></a>}
-          {(turn.status === "failed" || turn.status === "cancelled") && <button className="retry-button" disabled={pending} onClick={() => void ask(turn.question, turn.id)}>Retry this question</button>}
-          {index === turns.length - 1 && <div className="followups" aria-label="Continue the conversation">{turn.reply.followups.map(question => <button key={question} disabled={pending || listening} onClick={() => void ask(question)}>{question}<span aria-hidden="true"> →</span></button>)}</div>}
-        </section>)}
-        {pending && <p role="status" className="thinking"><span />Checking the profile… <button onClick={() => request.current?.abort("user")}>Stop response</button></p>}
+          {turn.reply.suggestContact && <a className="answer-contact" href={`mailto:${profile.contact.email}`}>{tt.direct} <Icon name="arrow" /></a>}
+          {(turn.status === "failed" || turn.status === "cancelled") && <button className="retry-button" disabled={pending} onClick={() => void ask(turn.question, turn.id)}>{tt.retry}</button>}
+          {index === turns.length - 1 && <div className="followups" aria-label={tt.followups}>{turn.reply.followups.map(question => <button key={question} disabled={pending || listening} onClick={() => void ask(question)}>{question}<span aria-hidden="true"> →</span></button>)}</div>}
+        </section>; })}
+        {pending && <p role="status" className="thinking"><span />{t.checking} <button onClick={() => request.current?.abort("user")}>{t.stopResponse}</button></p>}
       </div>
       <div className="composer-dock">
         <form className={`composer ${listening ? "is-listening" : ""}`} onSubmit={submit}>
-          <label className="sr-only" htmlFor="question">Ask about Tomas</label>
-          <input id="question" ref={input} value={query} onChange={event => setQuery(event.target.value)} placeholder={listening ? "Listening…" : "What would you like to know?"} maxLength={240} autoComplete="off" disabled={pending} />
-          <button type="button" className="icon-button mic-button" onClick={toggleVoice} disabled={pending} aria-label={listening ? "Stop recording" : "Dictate a question"} aria-pressed={listening}><Icon name={listening ? "stop" : "mic"} /></button>
-          <button type="submit" className="send-button" aria-label="Send question" disabled={!query.trim() || pending || listening}><Icon name="arrow" /></button>
+          <label className="sr-only" htmlFor="question">{t.ask}</label>
+          <input id="question" ref={input} value={query} onChange={event => setQuery(event.target.value)} placeholder={listening ? t.listening : t.placeholder} maxLength={240} autoComplete="off" disabled={pending} />
+          <button type="button" className="icon-button mic-button" onClick={toggleVoice} disabled={pending} aria-label={listening ? t.stopRecording : t.dictate} aria-pressed={listening}><Icon name={listening ? "stop" : "mic"} /></button>
+          <button type="submit" className="send-button" aria-label={t.send} disabled={!query.trim() || pending || listening}><Icon name="arrow" /></button>
         </form>
-        <div className="composer-meta"><span>{listening ? "Listening · tap stop to finish" : "Your questions. My experience."}</span><button type="button" aria-pressed={spoken} onClick={() => { if (spoken) { window.speechSynthesis?.cancel(); setSpeaking(false); } spokenEnabled.current = !spoken; setSpoken(!spoken); }}><Icon name="sound" />Spoken replies {spoken ? "on" : "off"}</button></div>
-        {speaking && <button className="stop-speaking" onClick={() => { window.speechSynthesis?.cancel(); setSpeaking(false); }}>Stop speaking</button>}
+        <div className="composer-meta"><span>{listening ? t.listeningHint : t.tagline}</span><button type="button" aria-pressed={spoken} onClick={() => { if (spoken) { window.speechSynthesis?.cancel(); setSpeaking(false); } spokenEnabled.current = !spoken; setSpoken(!spoken); }}><Icon name="sound" />{t.spoken} {spoken ? t.on : t.off}</button></div>
+        {speaking && <button className="stop-speaking" onClick={() => { window.speechSynthesis?.cancel(); setSpeaking(false); }}>{t.stopSpeaking}</button>}
         <p className="voice-notice" role="status">{notice}</p>
       </div>
     </main>
-    <footer className="site-footer"><span>Data engineering. AI. Software.</span><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(!motionPaused)}>{motionPaused ? "Resume visual" : "Pause visual"}</button><span>Built around a conversation.</span></footer>
+    <footer className="site-footer"><span>{t.footer}</span><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(!motionPaused)}>{motionPaused ? t.resume : t.pause}</button><span>{t.built}</span></footer>
   </div>;
 }

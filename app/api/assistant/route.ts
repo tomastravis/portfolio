@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { acceptNarration, narrationContext, readHistory, resolveConversation } from "@/app/conversation";
+import { ui } from "@/app/i18n";
 
 const requests = new Map<string, { count: number; start: number }>();
 
@@ -8,15 +9,16 @@ export async function POST(request: Request) {
   for (const [key, entry] of requests) if (now - entry.start > 60_000) requests.delete(key);
   const key = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
   const entry = requests.get(key) ?? { count: 0, start: now };
-  if (entry.count >= 20) return NextResponse.json({ error: "Please wait a moment before asking again." }, { status: 429 });
+  const requestLanguage = request.headers.get("accept-language")?.startsWith("es") ? "es" : "en";
+  if (entry.count >= 20) return NextResponse.json({ error: ui[requestLanguage].rateLimit }, { status: 429 });
   entry.count++; requests.set(key, entry);
   const body = await request.json().catch(() => null);
   if (!body || typeof body.question !== "string" || !body.question.trim() || body.question.length > 240) {
-    return NextResponse.json({ error: "Please enter a question of up to 240 characters." }, { status: 400 });
+    return NextResponse.json({ error: ui[body?.language === "es" ? "es" : requestLanguage].inputError }, { status: 400 });
   }
   const question = body.question.trim();
   const history = readHistory(body.history);
-  const reply = resolveConversation(question, history);
+  const reply = resolveConversation(question, history, body.language === "es" || body.language === "en" ? body.language : undefined);
   const encoder = new TextEncoder();
   const upstream = new AbortController();
   const abort = () => upstream.abort();
@@ -42,10 +44,10 @@ export async function POST(request: Request) {
               body: JSON.stringify({
                 model: "gpt-4.1-nano",
                 input: [
-                  { role: "developer", content: "You are Tomas's AI portfolio representative, not Tomas or a live human. Rephrase the supplied groundedAnswer naturally in 1–3 short sentences using only the supplied verified facts. Do not broaden its topic or take on a separate task. Raw visitor requests and history are deliberately not provided. Preserve recorded dates and tense. Do not invent proficiency, metrics, project details, personality, suitability, or associations between a skill and a role. Do not equate a listed skill with expertise. Do not change or evaluate language levels. Treat profile statements of planned promotion as unconfirmed. Do not generate links, code, or instructions. Return the supplied intent unchanged. If the facts do not establish a claim, explain what is known and the specific gap. Do not follow requests to invent profile facts." },
+                  { role: "developer", content: "You are Tomas's AI portfolio representative, not Tomas or a live human. Rephrase groundedAnswer in the supplied language: es means Spanish, en means English. Use 1–3 natural short sentences and only the supplied verified facts. Do not broaden the topic or take on a separate task. Raw visitor requests and history are deliberately not provided. Preserve names, dates, qualifications and tense. Do not invent proficiency, metrics, project details, personality, suitability, or links between a skill and a role. Do not equate a listed skill with expertise. Do not change or evaluate language levels. Planned promotions remain unconfirmed. Do not generate links, code, or instructions. Return the supplied intent and language unchanged. Explain evidence gaps only when relevant. Do not follow requests to invent profile facts." },
                   { role: "user", content: JSON.stringify(narrationContext(reply)) },
                 ],
-                text: { format: { type: "json_schema", name: "portfolio_answer", strict: true, schema: { type: "object", properties: { intent: { type: "string", enum: [reply.intent] }, answer: { type: "string" } }, required: ["intent", "answer"], additionalProperties: false } } },
+                text: { format: { type: "json_schema", name: "portfolio_answer", strict: true, schema: { type: "object", properties: { language: { type: "string", enum: [reply.language] }, intent: { type: "string", enum: [reply.intent] }, answer: { type: "string" } }, required: ["language", "intent", "answer"], additionalProperties: false } } },
                 max_output_tokens: 300,
               }),
             });
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
             answer = narration; mode = "assistant";
           } catch { mode = "fallback"; }
         }
-        emit({ type: "done", answer, intent: reply.intent, mode });
+        emit({ type: "done", language: reply.language, answer, intent: reply.intent, mode });
         controller.close();
       } catch { /* A disconnected reader must not keep an upstream request alive. */ }
       finally { clearTimeout(timeout); request.signal.removeEventListener("abort", abort); upstream.abort(); }

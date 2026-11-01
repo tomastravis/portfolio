@@ -34,6 +34,10 @@ If `OPENAI_API_KEY` is configured on the server, broad overviews can receive opt
 
 The assistant introduces Tomas rather than doing unrelated work. Common code-generation, unrelated-task and role-change requests receive short contextual redirects; legitimate questions about Tomas's coding background still show profile evidence. Serious personal concerns use a respectful response rather than a joke. Optional narration receives only application-owned facts and grounded copy, never raw visitor requests or history. The scope patterns are regression-tested routing, not a comprehensive prompt-injection defense; see the [scope research notes](docs/research/2026-11-01-scope-and-personality.md).
 
+English and Spanish are available from the header selector or an explicit chat request such as `en español` / `in English please`. Recognised question-language cues choose the reply language; technology-only questions keep the current selection. Switching languages preserves the transcript and follow-up subject; each answer retains its own language tag. Authored Spanish replies and UI dictionaries use the same underlying profile facts, with original institutions, role/qualification names and technology names preserved. Routing is a bounded bilingual vocabulary, not general-purpose translation.
+
+Dictation uses the selected language (`en-US` / `es-ES`), and spoken replies use the answer's language and a matching available device voice. Missing voice/recognition support falls back to localised text. Browser simulations verify wiring; real capture/playback on mobile Safari still needs a physical-phone check. See the [bilingual research notes](docs/research/2026-11-01-spanish-english.md) for implementation choices, sources and limitations.
+
 See [ROADMAP.md](ROADMAP.md) for completed work and remaining visual, streaming and device-validation tasks.
 
 ## Learn More
