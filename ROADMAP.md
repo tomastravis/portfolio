@@ -2,6 +2,32 @@
 
 The first conversation canvas is a starting point. The next iteration should feel like a responsive conversation with Tomas's AI representative: useful, attentive and grounded in verified profile information. Keep the layout simple and make the visual response specific to each question.
 
+## Current focus: natural conversation
+
+Work on one improvement at a time, validate it carefully, and finish it before moving to the next queued feature. The greeting/introduction pass below is complete. Bilingual support, scope/personality boundaries and the liquid visual remain separate follow-up tasks.
+
+- [x] Handle greetings and casual openings such as "hey" and "what's up" with short, natural replies, without missing-evidence disclaimers or unnecessary UI panels.
+- [x] Recognise "who is Tomas?" and common introductory paraphrases, and answer from the verified profile instead of showing a generic clarification.
+- [x] Vary social replies using bounded conversation history, preserve the technical subject through acknowledgements, and keep genuine source limitations for factual questions. Explicitly identify the speaker as an AI guide when asked.
+- [x] Pass 17 resolver regressions and replay the reported greeting/intro sequence against the production endpoint and rendered Chromium UI at 320px, 390px and 1440px, including transitions back to technical questions. Inspect the phone/desktop screenshots; physical Safari and microphone checks remain outstanding.
+
+Research and design rationale: [natural-conversation notes](docs/research/2026-11-01-natural-conversation.md).
+
+## Queued: scope and personality
+
+- [ ] Keep the assistant focused on Tomas, his work, background and relevant follow-ups. Requests to write code, complete unrelated tasks or act as a general-purpose assistant are out of scope; distinguish those from legitimate questions about Tomas's coding experience.
+- [ ] Redirect harmless off-topic requests with a brief, nonchalant joke or lightly sassy response, followed by a natural invitation to ask about Tomas. Example direction: "Nice try—I'm here to introduce Tomas, not do your coding homework. Curious what he's worked on?"
+- [ ] Keep the humour friendly and contextual rather than insulting or repetitive. Do not joke at the expense of a visitor expressing distress or a serious concern; use an appropriate, respectful boundary instead.
+- [ ] Test indirect requests, role-change/prompt-injection attempts and repeated off-topic requests, alongside legitimate technical questions about Tomas, so boundaries do not block relevant conversation.
+
+## Queued: Spanish and English
+
+- [ ] Support natural conversation in English and Spanish, following the visitor's language and allowing an explicit switch during a conversation without losing context.
+- [ ] Localise the complete interaction: answers, greetings, uncertainty, playful redirects, suggested questions, evidence labels, loading/errors and accessibility labels. Preserve original technology names, institutions, qualifications and source facts.
+- [ ] Support Spanish and English phrasing, accents and colloquial openings in routing and follow-ups; handle mixed-language questions and language-switch requests explicitly.
+- [ ] Match dictation language and spoken replies to the selected conversation language, with appropriate fallbacks for available browser voices. Verify on physical phones rather than assuming browser support.
+- [ ] Test equivalent Spanish/English scenarios, including Spark proficiency, pronoun follow-ups, greetings, profile introductions, unrelated coding requests and switching languages mid-conversation. Factual grounding must remain identical in both languages.
+
 ## Next: conversational intelligence
 
 - [x] Recognise named technologies and aliases, including Spark/PySpark. Replaced the broad-keyword-only route and inconsistent model-routing path with profile-derived matching and optional narration.

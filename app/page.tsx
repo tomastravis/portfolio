@@ -63,7 +63,7 @@ function Evidence({ intent, ask, research }: { intent: CanonicalIntent; ask: (qu
 }
 
 function AnswerVisual({ reply, ask }: { reply: ConversationReply; ask: (question: string) => void }) {
-  if (reply.view.type === "clarification") return null;
+  if (reply.view.type === "clarification" || reply.view.type === "conversation") return null;
   if (reply.view.type === "profile") return <Evidence intent={reply.intent} ask={ask} research={reply.view.focus === "research"} />;
   return <div className={`technology-evidence ${reply.view.type === "comparison" ? "comparison-evidence" : ""}`}>
     {reply.view.technologies.map(technology => <section key={technology.name} className="technology-detail">
@@ -186,11 +186,11 @@ export default function Home() {
       </section>
       <p className="sr-only" role="status">{turns.length ? `${pending ? "Preparing" : "Updated"} answer ${turns.length}: ${turns[turns.length - 1].reply.title}.` : ""}</p>
       <div className="conversation" aria-label="Conversation with Tomas Travis AI" aria-busy={pending}>
-        {turns.map((turn, index) => <section id={`turn-${turn.id}`} key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className="answer-section" aria-label={`Answer to ${turn.question}`}>
+        {turns.map((turn, index) => <section id={`turn-${turn.id}`} key={turn.id} ref={index === turns.length - 1 ? latest : undefined} className={`answer-section ${turn.reply.view.type === "conversation" ? "conversational-answer" : ""}`} aria-label={`Answer to ${turn.question}`}>
           <div className="question-bubble">{turn.question}</div>
-          <div className="answer-heading"><span className="answer-mark" aria-hidden="true">t.</span><span>Tomas Travis AI</span><span className="source-note">From my profile</span></div>
+          <div className="answer-heading"><span className="answer-mark" aria-hidden="true">t.</span><span>Tomas Travis AI</span>{turn.reply.view.type !== "conversation" && <span className="source-note">From my profile</span>}</div>
           {turn.message && <p className="fallback-note" role="status">{turn.message}</p>}
-          <h2>{turn.reply.title}</h2>
+          {turn.reply.view.type !== "conversation" && <h2>{turn.reply.title}</h2>}
           <p className="answer-prose">{turn.reply.answer}</p>
           <AnswerVisual reply={turn.reply} ask={question => { if (!pending && !listening) void ask(question); }} />
           {turn.reply.suggestContact && <a className="answer-contact" href={`mailto:${profile.contact.email}`}>Ask Tomas directly <Icon name="arrow" /></a>}

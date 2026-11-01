@@ -69,7 +69,7 @@ test('research follow-ups keep dated research evidence focused', () => {
 test('unknown topics clarify and offer actionable examples', () => {
   const reply = resolveConversation('What is his favourite film?');
   assert.equal(reply.view.type, 'clarification');
-  assert.match(reply.answer, /don’t have a verified detail/);
+  assert.match(reply.answer, /don’t have that detail/);
   assert.ok(reply.followups.length > 0);
 });
 
@@ -87,4 +87,67 @@ test('narration must preserve the resolved intent and stay bounded', () => {
   assert.equal(acceptNarration({intent:'skills', answer:'x'.repeat(1801)}, reply), null);
   assert.equal(acceptNarration({intent:'skills', answer:' '}, reply), null);
   assert.equal(acceptNarration({intent:'skills', answer:'A concise answer.'}, reply), 'A concise answer.');
+});
+
+test('reported hey / whats up / who is Tomas sequence stays conversational', () => {
+  const history = [];
+  for (const question of ['hey', 'whats up', 'who is tomas']) {
+    const reply = resolveConversation(question, history);
+    assert.equal(reply.view.type, 'conversation');
+    assert.doesNotMatch(reply.answer, /verified detail|don’t have|recorded in|specific technology/);
+    assert.equal(reply.suggestContact, false);
+    history.push(question);
+  }
+  const intro = resolveConversation('who is tomas', ['hey', 'whats up']);
+  assert.equal(intro.view.kind, 'introduction');
+  assert.match(intro.answer, /mathematics and data analytics/);
+  assert.match(intro.answer, /NTT DATA/);
+});
+
+test('common English greetings and punctuation variants are recognised', () => {
+  for (const question of ['Hey!', 'HI THERE', 'hello Tomas', 'good morning', 'what’s up?', "what's up", 'how are you doing today?', 'hey, how’s it going?']) {
+    const reply = resolveConversation(question);
+    assert.equal(reply.view.type, 'conversation', question);
+    assert.ok(['greeting', 'casual'].includes(reply.view.kind), question);
+  }
+});
+
+test('greeting wording varies within the conversation without fabricated personal updates', () => {
+  const first = resolveConversation('hey');
+  const again = resolveConversation('hey', ['hey']);
+  assert.notEqual(first.answer, again.answer);
+  assert.match(first.answer, /AI guide/);
+  assert.doesNotMatch(resolveConversation('whats up').answer, /I’m working|I feel|I just/);
+});
+
+test('introductory paraphrases and assistant identity receive distinct truthful answers', () => {
+  for (const question of ['who is Tomás?', "who's tomas", 'who is he?', 'hey, who is tomas?', 'tell me a bit about him', 'give me a quick introduction', 'what does he do?']) {
+    const reply = resolveConversation(question);
+    assert.equal(reply.view.kind, 'introduction', question);
+    assert.match(reply.answer, /Universidad Loyola/);
+  }
+  const identity = resolveConversation('are you Tomas?');
+  assert.equal(identity.view.kind, 'assistant');
+  assert.match(identity.answer, /not Tomas himself/);
+});
+
+test('a real topic after a greeting is not swallowed by small talk', () => {
+  assert.equal(resolveConversation('hey, is he good with Spark?').view.type, 'technology');
+  assert.equal(resolveConversation("what's up with Python?").view.type, 'technology');
+  assert.equal(resolveConversation('hello, what did he study?').intent, 'education');
+});
+
+test('yes accepts an offered intro, and tell me more can continue it', () => {
+  assert.equal(resolveConversation('yes please', ['hey']).view.kind, 'introduction');
+  assert.equal(resolveConversation('tell me more', ['hey', 'yes please']).intent, 'experience');
+  assert.equal(resolveConversation('tell me more', ['who is tomas']).intent, 'experience');
+});
+
+test('thanks preserves a technical topic without forcing evidence into the acknowledgement', () => {
+  const thanks = resolveConversation('thanks', ['is he good with Spark?']);
+  assert.equal(thanks.view.kind, 'acknowledgement');
+  assert.equal(thanks.followups.length, 0);
+  const followup = resolveConversation('where did he use it?', ['is he good with Spark?', 'thanks']);
+  assert.equal(followup.view.technologies[0].name, 'PySpark');
+  assert.match(followup.answer, /doesn’t connect it/);
 });

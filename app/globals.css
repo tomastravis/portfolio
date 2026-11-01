@@ -73,6 +73,10 @@ h1 span { color: #71849a; font-weight: 350; }
 .source-note { margin-left: auto; color: #778594; font-size: 10px; }
 .answer-section h2 { font-size: 28px; letter-spacing: -.8px; font-weight: 450; margin: 25px 0; }
 .answer-prose { color: #44576b; line-height: 1.8; font-size: 15px; margin: 22px 0; }
+.conversational-answer { padding-bottom: 24px; }
+.conversational-answer .question-bubble { margin-bottom: 22px; }
+.conversational-answer .answer-prose { margin: 12px 0 0; }
+.conversational-answer .followups { margin-top: 18px; }
 .timeline { padding: 0 0 0 20px; margin: 0 0 0 4px; list-style: none; border-left: 1px solid #cad6e5; }
 .timeline > li { position: relative; padding: 0 0 34px 12px; }
 .timeline > li:last-child { padding-bottom: 0; }

@@ -6,6 +6,7 @@ export type ConversationView =
   | { type: "technology"; technologies: TechnologyFact[] }
   | { type: "comparison"; technologies: TechnologyFact[] }
   | { type: "profile"; intent: CanonicalIntent; focus?: "research" }
+  | { type: "conversation"; kind: "greeting" | "casual" | "introduction" | "assistant" | "acknowledgement" | "goodbye" }
   | { type: "clarification" };
 export type ConversationReply = {
   version: 1; intent: CanonicalIntent; title: string; answer: string;
@@ -50,14 +51,63 @@ function selectTopic(question: string): CanonicalIntent {
   return resolveCanonicalIntent(question);
 }
 
+function normaliseOpening(question: string) {
+  return question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[’‘]/g, "'").replace(/\bwho'?s\b/g, "who is").replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function conversationKind(question: string): Extract<ConversationView, { type: "conversation" }>["kind"] | null {
+  const text = normaliseOpening(question);
+  if (/^(?:(?:hey+|hi+|hello|yo|hiya|howdy)(?: there| again| tomas(?: travis)?)?|good (?:morning|afternoon|evening))$/.test(text)) return "greeting";
+  const direct = text.replace(/^(?:hey|hi|hello)(?: there)?\s+/, "");
+  if (/^(?:(?:hey|hi|hello) )?(?:what'?s up|sup|how are you(?: doing)?|how'?s it going|how do you do)(?: today)?$/.test(text)) return "casual";
+  if (/^(?:who is (?:tomas(?: travis)?|he)|(?:tell me(?: a (?:bit|little))?|what do you know) about (?:tomas(?: travis)?|him)|(?:give me (?:a |the )?)?(?:quick |short )?(?:intro|introduction)(?: to tomas(?: travis)?)?|(?:can you )?introduce (?:tomas(?: travis)?|him)|what does (?:tomas(?: travis)?|he) do|what is his background)$/.test(direct)) return "introduction";
+  if (/^(?:who are you|what are you|introduce yourself|are you (?:tomas(?: travis)?|a real person|human)|is this (?:tomas|a real person)|what can you do)$/.test(direct)) return "assistant";
+  if (/^(?:thanks(?: a lot)?|thank you(?: very much)?|cheers|cool|nice|great|awesome|ok(?:ay)?|got it|i see|sounds good|perfect)$/.test(text)) return "acknowledgement";
+  if (/^(?:bye|goodbye|see you(?: later)?|that'?s all|all done)$/.test(text)) return "goodbye";
+  return null;
+}
+
+function conversationalReply(question: string, history: string[]): ConversationReply | null {
+  let kind = conversationKind(question);
+  const previous = readHistory(history);
+  if (/^(?:yes|yeah|yep|sure|please|go ahead|yes please)$/i.test(normaliseOpening(question))) {
+    const lastKind = conversationKind(previous.at(-1) ?? "");
+    if (lastKind === "greeting" || lastKind === "casual" || lastKind === "assistant") kind = "introduction";
+  }
+  if (!kind) return null;
+  const count = previous.filter(item => conversationKind(item) === kind).length;
+  const openings = [
+    "Hey! I’m Tomas’s AI guide. Want a quick introduction?",
+    "Hey again! Want the short version of who Tomas is?",
+    "Hello again. We can start with a quick intro to Tomas, if you like.",
+  ];
+  const responses = {
+    greeting: openings[count % openings.length],
+    casual: ["Here to help you get to know Tomas. Want the quick intro?", "We can keep it casual. Want the short version of who Tomas is?", "We can start wherever you like. Shall I introduce Tomas?"][count % 3],
+    introduction: "Tomas works across data engineering, AI and software engineering, with a background in mathematics and data analytics. His experience includes engineering at NTT DATA and deep-learning research at Universidad Loyola. Want to explore his work or how he got into it?",
+    assistant: "I’m Tomas’s AI portfolio guide, not Tomas himself. I can introduce him, explore his work with you, or dig into a specific technology. Want a quick introduction?",
+    acknowledgement: ["You’re welcome. Ask away if anything else comes to mind.", "Of course. What else are you curious about?", "Anytime. We can explore something else whenever you’re ready."][count % 3],
+    goodbye: "Thanks for stopping by. You can come back to explore more, or use Get in touch to reach Tomas directly.",
+  };
+  return { version: 1, intent: "unknown", title: kind === "introduction" ? "Meet Tomas" : "Conversation", answer: responses[kind], view: { type: "conversation", kind }, followups: kind === "goodbye" || kind === "acknowledgement" ? [] : kind === "introduction" ? ["Show me his experience", "What did he study?"] : ["Who is Tomas?", "Show me his experience"], suggestContact: false };
+}
+
 export function resolveConversation(question: string, history: string[] = []): ConversationReply {
   const clean = question.trim().slice(0, 240);
+  const conversational = conversationalReply(clean, history);
+  if (conversational) return conversational;
   let technologies = technologiesIn(clean);
   let intent = selectTopic(clean);
   let topic = clean;
   const isFollowup = /\b(it|that|those|them|there|more|else|where did|where has|how long|tell me more)\b/i.test(clean);
   if (!technologies.length && intent === "unknown" && isFollowup) {
-    for (const previous of readHistory(history).reverse()) {
+    const previousQuestions = readHistory(history);
+    for (let index = previousQuestions.length - 1; index >= 0; index--) {
+      const previous = previousQuestions[index];
+      const social = conversationalReply(previous, previousQuestions.slice(0, index));
+      const kind = social?.view.type === "conversation" ? social.view.kind : null;
+      if (kind === "introduction") { intent = "experience"; topic = previous; break; }
+      if (kind) continue;
       technologies = technologiesIn(previous);
       intent = technologies.length ? "skills" : selectTopic(previous);
       if (technologies.length || intent !== "unknown") { topic = previous; break; }
@@ -99,7 +149,7 @@ export function resolveConversation(question: string, history: string[] = []): C
     case "languages": return { ...base, title: "The languages he lists", answer: `His profile lists ${profile.languages.map(item => `${item.language} (${item.level})`).join(", ")}. ${/comfort|client|good|fluent/i.test(clean) ? "Those are recorded levels; the profile doesn’t establish how comfortable he is in a particular client situation." : "Want to explore his work or studies next?"}`, followups: ["Show me his experience", "What did he study?"], suggestContact: /comfort|client|good|fluent/i.test(clean) };
     case "projects": return { ...base, title: "Let’s separate projects from experience", answer: "There aren’t any standalone project entries in the profile yet. I can show you his recorded professional and research experience, or you can ask Tomas directly for a project example.", followups: ["Show me his experience", "Tell me about his research"], suggestContact: true };
     case "promotion": return { ...base, title: "What’s recorded about his next role", answer: `The profile records a planned move from ${profile.promotion.currentRole} to ${profile.promotion.newRole} at ${profile.promotion.company}, effective ${profile.promotion.effective}. Confirmation of that change hasn’t been added.`, followups: ["Show me his experience"], suggestContact: true };
-    default: return { ...base, title: /\b(hello|hi|hey)\b/i.test(clean) ? "Hello. What are you curious about?" : "Let’s make that a little more specific", answer: /\b(contact|email|reach|hire)\b/i.test(clean) ? "You can reach Tomas directly using the contact link below. I can also help you explore his recorded work before you get in touch." : "I don’t have a verified detail for that question yet. You can ask me about a specific technology, his work, studies or languages. For example: “Where did he use Kubernetes?”", view: { type: "clarification" }, followups: ["Where did he use Kubernetes?", "What did he study?", "Show me his experience"], suggestContact: /\b(contact|email|reach|hire)\b/i.test(clean) };
+    default: return { ...base, title: "Could you give me a little more to go on?", answer: /\b(contact|email|reach|hire)\b/i.test(clean) ? "You can reach Tomas directly using the contact link below. I can also help you explore his work before you get in touch." : "I don’t have that detail about Tomas yet. Want to explore his work, studies, or a particular technology instead?", view: { type: "clarification" }, followups: ["Who is Tomas?", "Show me his experience"], suggestContact: /\b(contact|email|reach|hire)\b/i.test(clean) };
   }
 }
 
