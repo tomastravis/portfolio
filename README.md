@@ -32,6 +32,8 @@ The assistant recognises recorded technologies and aliases, resolves follow-ups 
 
 If `OPENAI_API_KEY` is configured on the server, broad overviews can receive optional AI phrasing. Named-technology evidence, proficiency limitations and focused research remain deterministic. Without that key, or if narration is unavailable, the profile-backed conversation still works. No key is exposed to the browser. Real voice capture/playback still needs physical-device validation.
 
+The assistant introduces Tomas rather than doing unrelated work. Common code-generation, unrelated-task and role-change requests receive short contextual redirects; legitimate questions about Tomas's coding background still show profile evidence. Serious personal concerns use a respectful response rather than a joke. Optional narration receives only application-owned facts and grounded copy, never raw visitor requests or history. The scope patterns are regression-tested routing, not a comprehensive prompt-injection defense; see the [scope research notes](docs/research/2026-11-01-scope-and-personality.md).
+
 See [ROADMAP.md](ROADMAP.md) for completed work and remaining visual, streaming and device-validation tasks.
 
 ## Learn More

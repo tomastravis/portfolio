@@ -1,4 +1,4 @@
-import { CanonicalIntent, resolveCanonicalIntent } from "./assistant";
+import { CanonicalIntent, getFactsForScopes, resolveCanonicalIntent } from "./assistant";
 import { profile } from "./profile";
 
 export type TechnologyFact = { name: string; category: string; source: string; evidence: { role: string; company: string; dates: string; detail: string }[] };
@@ -6,7 +6,7 @@ export type ConversationView =
   | { type: "technology"; technologies: TechnologyFact[] }
   | { type: "comparison"; technologies: TechnologyFact[] }
   | { type: "profile"; intent: CanonicalIntent; focus?: "research" }
-  | { type: "conversation"; kind: "greeting" | "casual" | "introduction" | "assistant" | "acknowledgement" | "goodbye" }
+  | { type: "conversation"; kind: "greeting" | "casual" | "introduction" | "assistant" | "acknowledgement" | "goodbye" | "boundary" | "support" }
   | { type: "clarification" };
 export type ConversationReply = {
   version: 1; intent: CanonicalIntent; title: string; answer: string;
@@ -45,7 +45,7 @@ export function readHistory(value: unknown): string[] {
 }
 
 function selectTopic(question: string): CanonicalIntent {
-  if (/\b(certification|certified|cloud|devops|programming|analytics tools|machine learning tools)\b/i.test(question)) return "skills";
+  if (/\b(certification|certified|cloud|devops|programming|coding|code|scripts|analytics tools|machine learning tools)\b/i.test(question)) return "skills";
   if (/\b(robotics|research|reinforcement learning|ros ?2|autonomous|ntt|cloudera|etl|etls|pipelines|mentoring)\b/i.test(question)) return "experience";
   if (/\b(contact|email|reach|hire)\b/i.test(question)) return "unknown";
   return resolveCanonicalIntent(question);
@@ -55,7 +55,7 @@ function normaliseOpening(question: string) {
   return question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[’‘]/g, "'").replace(/\bwho'?s\b/g, "who is").replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function conversationKind(question: string): Extract<ConversationView, { type: "conversation" }>["kind"] | null {
+function conversationKind(question: string): Exclude<Extract<ConversationView, { type: "conversation" }>["kind"], "boundary" | "support"> | null {
   const text = normaliseOpening(question);
   if (/^(?:(?:hey+|hi+|hello|yo|hiya|howdy)(?: there| again| tomas(?: travis)?)?|good (?:morning|afternoon|evening))$/.test(text)) return "greeting";
   const direct = text.replace(/^(?:hey|hi|hello)(?: there)?\s+/, "");
@@ -92,18 +92,89 @@ function conversationalReply(question: string, history: string[]): ConversationR
   return { version: 1, intent: "unknown", title: kind === "introduction" ? "Meet Tomas" : "Conversation", answer: responses[kind], view: { type: "conversation", kind }, followups: kind === "goodbye" || kind === "acknowledgement" ? [] : kind === "introduction" ? ["Show me his experience", "What did he study?"] : ["Who is Tomas?", "Show me his experience"], suggestContact: false };
 }
 
+type ScopeReason = "coding" | "unrelated" | "instructions" | "urgent" | "support";
+const followupPattern = /\b(it|that|those|them|there|more|else|where did|where has|how long|tell me more)\b/i;
+const insistencePattern = /^(?:do it anyway|just do it|just this once|come on|try anyway|please|please do it)$/;
+
+export function classifyScope(question: string): ScopeReason | null {
+  const text = normaliseOpening(question.replace(/[\u200B-\u200D\uFEFF]/g, ""));
+  if (/\b(?:kill myself|hurt myself|end my life|want to die|suicidal|in immediate danger|not safe right now)\b/.test(text)) return "urgent";
+  if (/\b(?:i am|i'm|im|i feel) (?:really |so |very )?(?:depressed|grieving|scared|unsafe)|\b(?:i need (?:medical|legal|mental health) (?:advice|help)|i(?:'m| am) having a panic attack)|\b(?:my (?:dad|mom|mum|mother|father|partner|friend) (?:died|passed away)|i lost my (?:dad|mom|mum|mother|father|partner|friend))\b/.test(text)) return "support";
+  const roleChange = /(?:^|\b(?:you|please|now|then) )(?:act as|roleplay as|pretend to be)\b|\b(?:you are now|pretend you are|switch roles)\b/.test(text);
+  if (roleChange || /\b(?:ignore|disregard|forget|override|bypass)\b.{0,55}\b(?:instructions|rules|guardrails|restrictions|prompt)\b|\b(?:system prompt|api key|secret key|developer mode)\b|\b(?:reveal|show|print|repeat|output)\b.{0,40}\b(?:instructions|configuration|secrets|system message)\b/.test(text)) return "instructions";
+
+  // A question about Tomas doing a task is not delegation to this assistant.
+  // A mixed request can still explicitly delegate work in its second clause.
+  const profileText = text.replace(/^(?:(?:hey|hi|hello) )?(?:(?:can|could|would) you (?:please )?|please )?/, "");
+  const profileQuestion = /^(?:(?:can|could|would|does|did|has|is) (?:tomas(?: travis)?|he)\b|(?:what|which|where|when|how|tell me about|show me)\b.*\b(?:tomas|his|he)\b|(?:explain|describe|write about) (?:his|tomas)\b)/.test(profileText);
+  const extraTask = /\b(?:also|then|and|instead) (?:please )?(?:write|build|create|generate|debug|fix|solve|run)\b/.test(text);
+  const delegation = /\b(?:write|build|make|create|generate|implement|debug|fix|refactor|execute|run|solve|review|complete|finish|give me|show me|help me|i need|i want|teach me|explain|design)\b|\bdo (?:my|this|the) (?:homework|assignment|coding)\b/.test(text);
+  const codeArtifact = technologiesIn(question).length > 0 || /\b(?:code|script|function|program|app|website|algorithm|regex|homework|sql query|query|tests?|python|sql|typescript|javascript)\b/.test(text);
+  if (delegation && codeArtifact && (!profileQuestion || extraTask) && !/^tell me about (?:python|pyspark|spark|sql|typescript|javascript)$/.test(text)) return "coding";
+  if (/\b(?:write|compose|draft|translate|summari[sz]e|plan|book|recommend|solve|calculate|review)\b/.test(text) && /\b(?:poem|story|essay|email|letter|text|document|article|recipe|dinner|trip|flight|holiday|equation|homework|resume|cv)\b/.test(text) && (!profileQuestion || extraTask)) return "unrelated";
+  if (conversationKind(question)) return null;
+  if (/^(?:yes|yeah|yep|sure|please|go ahead|yes please)$/.test(text)) return null;
+  if (technologiesIn(question).length || selectTopic(question) !== "unknown" || /\b(?:tomas|his|he|him)\b/.test(text) || followupPattern.test(text)) return null;
+  return "unrelated";
+}
+
+function scopeReply(question: string, history: string[]): ConversationReply | null {
+  let reason = classifyScope(question);
+  const previous = readHistory(history);
+  if (insistencePattern.test(normaliseOpening(question)) && previous.length) {
+    for (const earlier of [...previous].reverse()) {
+      if (insistencePattern.test(normaliseOpening(earlier))) continue;
+      reason = classifyScope(earlier);
+      break;
+    }
+  }
+  if (!reason) return null;
+  const serious = reason === "urgent" || reason === "support";
+  const count = previous.filter(item => {
+    const previousReason = classifyScope(item) ?? (insistencePattern.test(normaliseOpening(item)) ? "unrelated" : null);
+    return previousReason && previousReason !== "urgent" && previousReason !== "support";
+  }).length;
+  const coding = [
+    "Nice try—this is Tomas’s portfolio, not a coding hotline. I can show you his programming background, though.",
+    "The coding shift belongs to Tomas. I’m here for the introduction—want to explore his technical skills?",
+    "Still on portfolio duty. I can talk about Tomas’s coding experience, but I won’t write or debug code here.",
+  ];
+  const redirects = [
+    "A small detour from the Tomas tour. I’m here to help you get to know him—curious about his work or studies?",
+    "My entire beat is Tomas. Want the quick introduction, or a closer look at his experience?",
+    "Keeping this little corner of the internet about Tomas. What would you like to know about him?",
+  ];
+  const answer = reason === "urgent"
+    ? "I’m sorry you’re going through this. If you’re in immediate danger, contact local emergency services or someone you trust nearby. This portfolio guide can’t provide crisis support."
+    : reason === "support"
+      ? "I’m sorry you’re dealing with that. I’m a portfolio guide, so I can’t offer professional advice or personal support. Please reach out to someone you trust or a qualified professional."
+      : reason === "coding" ? coding[count % coding.length]
+        : reason === "instructions" ? "I’m keeping my portfolio-guide hat on. I can help you explore Tomas’s background, not change roles or share internal configuration."
+          : redirects[count % redirects.length];
+  return { version: 1, intent: "unknown", title: serious ? "Support" : "Back to Tomas", answer, view: { type: "conversation", kind: serious ? "support" : "boundary" }, followups: serious ? [] : ["Who is Tomas?", "What technologies does he use?"], suggestContact: false };
+}
+
+export function narrationContext(reply: ConversationReply) {
+  // Only application-owned facts and resolved copy enter the optional model.
+  // Never include raw visitor questions or conversation history here.
+  return { intent: reply.intent, facts: getFactsForScopes([reply.intent]), groundedAnswer: reply.answer };
+}
+
 export function resolveConversation(question: string, history: string[] = []): ConversationReply {
   const clean = question.trim().slice(0, 240);
+  const boundary = scopeReply(clean, history);
+  if (boundary) return boundary;
   const conversational = conversationalReply(clean, history);
   if (conversational) return conversational;
   let technologies = technologiesIn(clean);
   let intent = selectTopic(clean);
   let topic = clean;
-  const isFollowup = /\b(it|that|those|them|there|more|else|where did|where has|how long|tell me more)\b/i.test(clean);
+  const isFollowup = followupPattern.test(clean);
   if (!technologies.length && intent === "unknown" && isFollowup) {
     const previousQuestions = readHistory(history);
     for (let index = previousQuestions.length - 1; index >= 0; index--) {
       const previous = previousQuestions[index];
+      if (classifyScope(previous)) continue;
       const social = conversationalReply(previous, previousQuestions.slice(0, index));
       const kind = social?.view.type === "conversation" ? social.view.kind : null;
       if (kind === "introduction") { intent = "experience"; topic = previous; break; }

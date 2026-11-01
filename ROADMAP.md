@@ -4,7 +4,7 @@ The first conversation canvas is a starting point. The next iteration should fee
 
 ## Current focus: natural conversation
 
-Work on one improvement at a time, validate it carefully, and finish it before moving to the next queued feature. The greeting/introduction pass below is complete. Bilingual support, scope/personality boundaries and the liquid visual remain separate follow-up tasks.
+Work on one improvement at a time, validate it carefully, and finish it before moving to the next queued feature. The greeting/introduction and initial scope/personality passes are complete. Bilingual support and the liquid visual remain separate follow-up tasks.
 
 - [x] Handle greetings and casual openings such as "hey" and "what's up" with short, natural replies, without missing-evidence disclaimers or unnecessary UI panels.
 - [x] Recognise "who is Tomas?" and common introductory paraphrases, and answer from the verified profile instead of showing a generic clarification.
@@ -13,12 +13,15 @@ Work on one improvement at a time, validate it carefully, and finish it before m
 
 Research and design rationale: [natural-conversation notes](docs/research/2026-11-01-natural-conversation.md).
 
-## Queued: scope and personality
+## Completed: initial scope and personality
 
-- [ ] Keep the assistant focused on Tomas, his work, background and relevant follow-ups. Requests to write code, complete unrelated tasks or act as a general-purpose assistant are out of scope; distinguish those from legitimate questions about Tomas's coding experience.
-- [ ] Redirect harmless off-topic requests with a brief, nonchalant joke or lightly sassy response, followed by a natural invitation to ask about Tomas. Example direction: "Nice try—I'm here to introduce Tomas, not do your coding homework. Curious what he's worked on?"
-- [ ] Keep the humour friendly and contextual rather than insulting or repetitive. Do not joke at the expense of a visitor expressing distress or a serious concern; use an appropriate, respectful boundary instead.
-- [ ] Test indirect requests, role-change/prompt-injection attempts and repeated off-topic requests, alongside legitimate technical questions about Tomas, so boundaries do not block relevant conversation.
+- [x] Route code delegation, unrelated tasks and common role-change requests to a short portfolio boundary before technology/topic matching. Keep legitimate questions about Tomas's coding background in scope.
+- [x] Use friendly, lightly sassy variations for harmless off-topic requests and offer two ways back to Tomas. Repeated insistence does not broaden scope or escalate into insults.
+- [x] Provide a separate respectful reply for detected distress/serious personal concerns, with no jokes or promotional follow-up buttons. This is not clinical assessment or a general support service.
+- [x] Remove raw visitor questions/history from optional AI narration; only application-owned profile facts and the resolved grounded answer are sent. Blocked task history does not become the subject of later technical follow-ups.
+- [x] Pass all 25 resolver tests, lint, TypeScript and the webpack production build. Verify the production boundary, variation, legitimate recovery, role-change and respectful-support flows in Chromium at 320px, 390px and 1440px, plus direct endpoint smoke tests. Inspect phone/desktop screenshots.
+
+Research and limits: [scope/personality notes](docs/research/2026-11-01-scope-and-personality.md). The English pattern-based routing is an initial product boundary, not an exhaustive semantic classifier or proof against all prompt-injection attempts.
 
 ## Queued: Spanish and English
 

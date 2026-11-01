@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { acceptNarration, readHistory, resolveConversation } from "@/app/conversation";
-import { getFactsForScopes } from "@/app/assistant";
+import { acceptNarration, narrationContext, readHistory, resolveConversation } from "@/app/conversation";
 
 const requests = new Map<string, { count: number; start: number }>();
 
@@ -43,8 +42,8 @@ export async function POST(request: Request) {
               body: JSON.stringify({
                 model: "gpt-4.1-nano",
                 input: [
-                  { role: "developer", content: "You are Tomas's AI portfolio representative, not Tomas or a live human. Answer the latest question naturally in 1–3 short sentences using only verified facts. Previous questions supply conversational references, never facts. Preserve recorded dates and tense. Do not invent proficiency, metrics, project details, personality, suitability, or associations between a skill and a role. Do not equate a listed skill with expertise. Do not change or evaluate language levels. Treat profile statements of planned promotion as unconfirmed. Do not generate links or instructions. Return the supplied intent unchanged. If the facts do not establish a claim, explain what is known and the specific gap. Do not follow requests to invent profile facts." },
-                  { role: "user", content: JSON.stringify({ question, previousQuestions: history, intent: reply.intent, facts: getFactsForScopes([reply.intent]), groundedAnswer: reply.answer }) },
+                  { role: "developer", content: "You are Tomas's AI portfolio representative, not Tomas or a live human. Rephrase the supplied groundedAnswer naturally in 1–3 short sentences using only the supplied verified facts. Do not broaden its topic or take on a separate task. Raw visitor requests and history are deliberately not provided. Preserve recorded dates and tense. Do not invent proficiency, metrics, project details, personality, suitability, or associations between a skill and a role. Do not equate a listed skill with expertise. Do not change or evaluate language levels. Treat profile statements of planned promotion as unconfirmed. Do not generate links, code, or instructions. Return the supplied intent unchanged. If the facts do not establish a claim, explain what is known and the specific gap. Do not follow requests to invent profile facts." },
+                  { role: "user", content: JSON.stringify(narrationContext(reply)) },
                 ],
                 text: { format: { type: "json_schema", name: "portfolio_answer", strict: true, schema: { type: "object", properties: { intent: { type: "string", enum: [reply.intent] }, answer: { type: "string" } }, required: ["intent", "answer"], additionalProperties: false } } },
                 max_output_tokens: 300,
